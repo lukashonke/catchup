@@ -126,10 +126,19 @@ def seed(path: Path) -> int:
     for kind, title, priority, age, links, body in sorted(ITEMS, key=lambda i: -i[3]):
         with Store(path, clock=lambda age=age: now - age) as store:
             store.add(kind, title, priority=priority, links=links, body=body)
-    with Store(path, clock=lambda: now - timedelta(minutes=40)) as store:
+    with Store(path, clock=lambda: now - timedelta(hours=4)) as store:
+        # The user has seen everything but the items of the last few hours, which stay new.
+        for item in store.list(kind="all"):
+            if item.created_at < now - timedelta(hours=4):
+                store.mark_seen(item.id)
         rate_limiter = next(i for i in store.list() if i.title.startswith("Review: rate"))
+    with Store(path, clock=lambda: now - timedelta(hours=2)) as store:
+        store.mark_opened(rate_limiter.id)
+    with Store(path, clock=lambda: now - timedelta(minutes=40)) as store:
         store.update(rate_limiter.id, note="Tomás pushed the requested changes")
-        return rate_limiter.id
+    with Store(path, clock=lambda: now - timedelta(minutes=25)) as store:
+        store.update(rate_limiter.id, note="Merge only after the load test", actor="user")
+    return rate_limiter.id
 
 
 async def main() -> None:
