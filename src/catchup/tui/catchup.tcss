@@ -191,7 +191,8 @@ Screen.-narrow, Screen.-tiny {
         width: 1fr;
         height: auto;
         max-height: 45%;
-        padding-bottom: 1;
+        /* All four sides: Textual applies a lone padding-bottom as the whole padding. */
+        padding: 1 1 1 1;
     }
     & #details {
         width: 1fr;
