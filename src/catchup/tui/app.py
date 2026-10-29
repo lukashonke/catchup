@@ -13,6 +13,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.content import Content
 from textual.style import Style
+from textual.timer import Timer
 from textual.widgets import Button, OptionList, Static
 
 from catchup import CatchupError, agent
@@ -27,6 +28,7 @@ from catchup.tui.widgets import Details, ItemList, day, day_time
 from catchup.when import parse_every, parse_until
 
 POLL_SECONDS = 2.0
+SEEN_SECONDS = 1.0
 AGENT_CHECK_SECONDS = 30.0
 NARROW_COLUMNS = 110
 TINY_COLUMNS = 62
@@ -85,6 +87,8 @@ class CatchupApp(App[None]):
         self.agent_state = agent.RunState(started_at=None, running=False)
         # The items as they were before each state change made in this session, latest last.
         self._undo: list[Item] = []
+        # The new item that counts as seen when its timer fires, unless the selection moves first.
+        self._seen: tuple[int, Timer] | None = None
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="bar"):
@@ -221,6 +225,7 @@ class CatchupApp(App[None]):
             "   ",
             (f"{snapshot.counts['open']} waiting", theme.FOREGROUND),
             (f" · {snapshot.urgent} urgent", theme.URGENT if snapshot.urgent else theme.DIM),
+            (f" · {snapshot.new} new", theme.ACCENT if snapshot.new else theme.DIM),
         )
         self.query_one("#summary", Static).update(summary)
         last = snapshot.last_agent_at
@@ -248,6 +253,28 @@ class CatchupApp(App[None]):
         items = [*self.snapshot.waiting, *self.snapshot.feed] if self.snapshot else []
         self.item = next((item for item in items if item.id == selected), None)
         self._load_details(self.item)
+        self._watch_seen()
+
+    def _watch_seen(self) -> None:
+        """Mark the selected item seen once it stays selected for SEEN_SECONDS."""
+        item = self.item
+        if self._seen and (item is None or item.id != self._seen[0]):
+            self._seen[1].stop()
+            self._seen = None
+        if item and item.new and self._seen is None:
+            self._seen = (item.id, self.set_timer(SEEN_SECONDS, partial(self._mark_seen, item.id)))
+
+    @work(group="seen")
+    async def _mark_seen(self, item_id: int) -> None:
+        self._seen = None
+        try:
+            await self.store.run(lambda store: store.mark_seen(item_id))
+        except (CatchupError, sqlite3.Error):
+            # The poll reports a broken database; a missed mark only keeps the dot.
+            return
+        # Seeing an item is not an event, so the poll would not notice it.
+        if self.is_running:
+            await self.reload()
 
     @work(exclusive=True, group="details")
     async def _load_details(self, item: Item | None) -> None:

@@ -22,7 +22,7 @@ Priority = Literal["urgent", "normal", "low"]
 Actor = Literal["agent", "user"]
 Action = Literal["created", "updated", "done", "snoozed", "reopened", "ignored", "note", "opened"]
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _SCHEMA = (
     """
@@ -37,7 +37,8 @@ _SCHEMA = (
         state TEXT CHECK (state IN ('open', 'snoozed', 'done', 'ignored')),
         snoozed_until TEXT,
         created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
+        updated_at TEXT NOT NULL,
+        seen_at TEXT
     )
     """,
     """
@@ -52,6 +53,13 @@ _SCHEMA = (
     """,
     "CREATE INDEX events_item_id ON events (item_id)",
 )
+
+# An item is new when the agent added, reopened or updated it after the user last saw it.
+_IS_NEW = """
+    EXISTS (SELECT 1 FROM events n WHERE n.item_id = i.id AND n.actor = 'agent'
+            AND n.action IN ('created', 'reopened', 'updated')
+            AND (i.seen_at IS NULL OR n.at > i.seen_at))
+"""
 
 # A snoozed item whose date has passed counts as open; this is the SQL form of that rule.
 _EFFECTIVE_STATE = (
@@ -88,6 +96,8 @@ class Item:
     updated_at: datetime
     # When the user last opened the item in a coding agent.
     opened_at: datetime | None
+    # Whether the agent changed the item since the user last saw it.
+    new: bool
     last_event: Event | None
 
 
@@ -241,6 +251,14 @@ class Store:
             )
         return self._set_state(item_id, "snoozed", "snoozed", until, note, actor)
 
+    def mark_seen(self, item_id: int) -> None:
+        """Record that the user saw the item as it is now; this is not an event."""
+        with self._write():
+            self._require(item_id)
+            self._db.execute(
+                "UPDATE items SET seen_at = ? WHERE id = ?", (_ts(self._now()), item_id)
+            )
+
     def mark_opened(self, item_id: int) -> Item:
         """Record that the user opened the item in a coding agent."""
         now = self._now()
@@ -342,7 +360,8 @@ class Store:
                    e.id AS e_id, e.at AS e_at, e.actor AS e_actor,
                    e.action AS e_action, e.note AS e_note,
                    (SELECT max(at) FROM events WHERE item_id = i.id AND action = 'opened')
-                       AS opened_at
+                       AS opened_at,
+                   {_IS_NEW} AS is_new
             FROM items i
             LEFT JOIN events e ON e.id = (SELECT max(id) FROM events WHERE item_id = i.id)
             WHERE {where}
@@ -394,6 +413,11 @@ class Store:
             if version == 0:
                 for statement in _SCHEMA:
                     self._db.execute(statement)
+            elif version == 1:
+                # Items that exist count as seen, so the first start does not mark them all new.
+                self._db.execute("ALTER TABLE items ADD COLUMN seen_at TEXT")
+                self._db.execute("UPDATE items SET seen_at = ?", (_ts(self._now()),))
+            if version < SCHEMA_VERSION:
                 self._db.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
     def _now(self) -> datetime:
@@ -460,5 +484,6 @@ def _item(row: sqlite3.Row) -> Item:
         created_at=_dt(row["created_at"]),
         updated_at=_dt(row["updated_at"]),
         opened_at=_dt(row["opened_at"]) if row["opened_at"] else None,
+        new=bool(row["is_new"]),
         last_event=last_event,
     )

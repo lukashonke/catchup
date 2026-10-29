@@ -213,3 +213,48 @@ def test_mark_opened_records_a_user_event(store: Store, clock: Clock) -> None:
     assert opened.opened_at == opened.updated_at == clock.now
     assert opened.last_event is not None
     assert (opened.last_event.action, opened.last_event.actor) == ("opened", "user")
+
+
+def test_an_item_is_new_until_seen_and_again_after_an_agent_change(
+    store: Store, clock: Clock
+) -> None:
+    item = store.add("waiting", "Answer Jana")
+    assert store.get(item.id).new
+    clock.now = T0 + timedelta(minutes=5)
+    store.mark_seen(item.id)
+    seen = store.get(item.id)
+    assert not seen.new
+    assert seen.updated_at == T0 and [e.action for e in store.history(item.id)] == ["created"]
+
+    clock.now = T0 + timedelta(minutes=10)
+    store.update(item.id, note="the agent's note")
+    store.update(item.id, note="the user's note", actor="user")
+    store.done(item.id)
+    assert not store.get(item.id).new
+    store.update(item.id, title="Answer Jana today")
+    assert store.get(item.id).new
+
+
+def test_version_1_database_gains_seen_at_with_its_items_seen(tmp_path: Path) -> None:
+    path = tmp_path / "catchup.db"
+    with sqlite3.connect(path) as db:
+        db.executescript(
+            """
+            CREATE TABLE items (id INTEGER PRIMARY KEY, kind TEXT NOT NULL, title TEXT NOT NULL,
+                body TEXT, priority TEXT NOT NULL DEFAULT 'normal', links TEXT NOT NULL DEFAULT '[]',
+                prompt TEXT, state TEXT, snoozed_until TEXT, created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL);
+            CREATE TABLE events (id INTEGER PRIMARY KEY, item_id INTEGER NOT NULL, at TEXT NOT NULL,
+                actor TEXT NOT NULL, action TEXT NOT NULL, note TEXT);
+            INSERT INTO items (kind, title, state, created_at, updated_at)
+                VALUES ('waiting', 'old', 'open', '2026-10-01T09:00:00Z', '2026-10-01T09:00:00Z');
+            INSERT INTO events (item_id, at, actor, action)
+                VALUES (1, '2026-10-01T09:00:00Z', 'agent', 'created');
+            PRAGMA user_version = 1;
+            """
+        )
+    with Store(path, clock=lambda: T0) as store:
+        assert not store.get(1).new
+        assert store.add("waiting", "fresh").new
+    with sqlite3.connect(path) as db:
+        assert db.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 2

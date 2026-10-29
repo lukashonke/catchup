@@ -103,7 +103,9 @@ async def test_done_moves_the_item_to_the_done_tab_as_a_user_event(db: Path) -> 
 
 
 async def test_enter_opens_the_selected_item(db: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    add(db, "waiting", "Answer Ken", 1)
+    item_id = add(db, "waiting", "Answer Ken", 1)
+    with Store(db) as store:
+        store.mark_seen(int(item_id))
     open_item = AsyncMock()
     monkeypatch.setattr("catchup.tui.app.open_item", open_item)
     config = Config(open_command=["/opt/open.sh"])
@@ -388,3 +390,28 @@ async def test_n_adds_a_note_as_the_user(db: Path) -> None:
             ("agent", "created", None),
             ("user", "note", "Close when Tomas replies"),
         ]
+
+
+async def test_new_items_get_a_dot_until_selected_for_a_moment(
+    db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("catchup.tui.app.SEEN_SECONDS", 0.2)
+    seen = add(db, "waiting", "Answer Ken", 2)
+    add(db, "waiting", "Approve the budget", 1)
+    add(db, "fyi", "Release shipped", 0)
+    with Store(db) as store:
+        store.mark_seen(int(seen))
+
+    app = CatchupApp(Config())
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        assert "· 2 new" in text(app, "#summary")
+        rows = text(app, "#list").splitlines()
+        assert [row.split()[0] for row in (rows[1], rows[2], rows[5])] == ["Answer", "•", "•"]
+
+        # Passing over a row does not count as seeing it.
+        await pilot.press("down", "down")
+        await pilot.pause(0.4)
+        await app.workers.wait_for_complete()
+        assert "· 1 new" in text(app, "#summary")
+        assert text(app, "#list").splitlines()[2].split()[0] == "•"

@@ -80,8 +80,12 @@ def _row(item: Item, now: datetime) -> Table:
     grid.add_column(ratio=1)
     grid.add_column(width=8, no_wrap=True)
     grid.add_column(width=4, no_wrap=True, justify="right")
+    if item.new:
+        status = Text("•", style=f"bold {theme.ACCENT}")
+    else:
+        status = Text("↗" if item.opened_at else "", style=theme.DIM)
     grid.add_row(
-        Text("↗", style=theme.DIM) if item.opened_at else Text(""),
+        status,
         marker,
         _Line(Text(item.title, style=theme.FEED if fyi else "")),
         Text(link_type, style=theme.LINK_COLORS.get(link_type, theme.DIM)),

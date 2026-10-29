@@ -45,6 +45,8 @@ class Snapshot:
     event_id: int
     counts: dict[State, int]
     urgent: int
+    # The new items among the open waiting items and the feed.
+    new: int
     waiting: list[Item]
     feed: list[Item]
     last_agent_at: datetime | None
@@ -55,11 +57,13 @@ def load(store: Store, tab: State) -> Snapshot:
     # Read first, so a change that lands while loading shows up as a newer id on the next poll.
     event_id = store.last_event_id()
     waiting: dict[State, list[Item]] = {state: store.list(state=state) for state in TABS}
+    feed = store.list(kind="fyi")
     return Snapshot(
         event_id=event_id,
         counts={state: len(items) for state, items in waiting.items()},
         urgent=sum(item.priority == "urgent" for item in waiting["open"]),
+        new=sum(item.new for item in [*waiting["open"], *feed]),
         waiting=waiting[tab],
-        feed=store.list(kind="fyi") if tab == "open" else [],
+        feed=feed if tab == "open" else [],
         last_agent_at=store.last_agent_event_at(),
     )

@@ -29,11 +29,15 @@ An item has:
 - `state`: `open`, `snoozed`, `done` or `ignored` for waiting items, empty for FYIs.
 - `snoozed_until`: a timestamp, set only while snoozed.
 - `created_at`, `updated_at`: timestamps that the store sets.
+- `seen_at`: when the user last saw the item in the TUI. It is not an event and does not change `updated_at`.
 - `opened_at`: when the user last opened the item in a coding agent. It is read from the events, not stored.
+- `new`: whether the agent created, reopened or updated the item after `seen_at`. It is read from the events, not stored.
 
 An event has `item_id`, `at`, `actor` (`agent` or `user`), `action` (`created`, `updated`, `done`, `snoozed`, `reopened`, `ignored`, `note`, `opened`) and an optional `note`.
 
 All timestamps are stored as ISO 8601 in UTC and shown in local time.
+
+The schema version is in `PRAGMA user_version`, and the store migrates an older database when it opens it. Version 2 added `seen_at` and set it to the time of the migration, so items that existed before do not count as new.
 
 ### Link type inference
 
