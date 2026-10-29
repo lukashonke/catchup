@@ -59,3 +59,14 @@ _Avoid_: Log entry, audit record
 
 **Actor**:
 Who made an event: you or the agent.
+
+**New**:
+An item the agent created, reopened or updated after you last saw it in the terminal UI.
+_Avoid_: Unread, fresh
+
+**Note**:
+Text written on an item and recorded as an event. Your notes are context or to-dos for the agent; the agent's notes say why it made a change.
+_Avoid_: Comment, memo
+
+**Opened**:
+An item you opened in a coding agent, which means you started working on it. It does not mean the item is handled.

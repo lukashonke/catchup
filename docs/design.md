@@ -107,17 +107,32 @@ If an item has no prompt, catchup sends a default one: the title, the body, the 
 
 The TUI is a two-pane view:
 
-- **Header**: the name, the number of open waiting items and urgent items, and the time of the agent's last event. With an agent run configured, it also shows when the run started while it runs, and else when the next run is due.
+- **Header**: the name, the number of open waiting items, urgent items and new items, and the time of the agent's last event. With an agent run configured, it also shows when the run started while it runs, and else when the next run is due.
 - **State tabs**: Open, Snoozed, Done, Ignored, each with a count.
-- **List**, on the left. On the Open tab it shows a "Waiting on you" section first, sorted by priority and then oldest first. Below it is the FYI feed, newest first, in dimmer text. Each row shows a priority marker (`!` urgent, `↓` low), the title, the type of the main link, and the age. The age turns yellow after 3 days and red after 7.
-- **Details**, on the right: the title, the state, when it was first seen, the body, the links as clickable chips with their type, the buttons, the prompt that "Open in Claude" will send, and the history.
+- **Filter bar**, above the list while a filter is set.
+- **List**, on the left. On the Open tab it shows a "Waiting on you" section first, sorted by priority and then oldest first. Below it is the FYI feed, newest first, in dimmer text. Each row shows a dot for a new item or an arrow for an opened one, a priority marker (`!` urgent, `↓` low), the title, the type of the main link, and the age. The age turns yellow after 3 days and red after 7.
+- **Details**, on the right: the title, the state, when it was first seen and last opened, the body, the links as clickable chips with their type, the buttons, the prompt that "Open in Claude" will send, and the history, including your notes.
 - **Buttons** for a waiting item: Open in Claude, Done, Snooze (1d, 3d, until Monday), Ignore. For done and ignored items: Open in Claude and Reopen. For an FYI: Open in Claude only.
+- **Footer**: the most used keys, and `?` for the list of all keys.
 
-In a narrow terminal the details pane moves below the list. The mouse and the up and down keys select items. The keys:
+In a narrow terminal the details pane moves below the list, and the footer drops the hints that do not fit.
+
+An item is new when the agent created, reopened or updated it after you last saw it. An item counts as seen when it stays selected for a second, so moving the selection past a row does not count. Seeing an item is not an event and does not change `updated_at`, so it never makes the item look changed to the agent.
+
+When "Open in Claude" succeeds, the TUI records an `opened` event by you. The details pane shows how long ago you last opened the item, and its row shows an arrow while it is not new.
+
+The mouse and the up and down keys select items. The keys:
 
 - Left and right: the previous and the next state tab.
 - Enter: Open in Claude.
 - Ctrl+Enter: open the first link in the browser. The terminal must send Ctrl+Enter as its own key (the kitty keyboard protocol); otherwise it arrives as Enter.
-- Space: Done. Backspace: Ignore. Both act only on open and snoozed waiting items.
+- Space: Done. Backspace: Ignore. z: the snooze picker. These act only on open and snoozed waiting items.
+- u: undo the latest state change made in this TUI session (done, ignore, snooze, reopen, from keys or buttons). It restores the previous state and snooze date as your change, with the note "undo". The undo history is in memory and ends with the session.
+- n: write a note on the selected item, waiting item or FYI. Ctrl+S saves it as a `note` event by you; Esc or an empty note cancels.
+- /: filter the rows of the current tab by title, body and link labels, ignoring case. The section counts show the filtered rows. Enter returns to the list and keeps the filter; Esc clears it.
 - c: catch up now, which starts the agent run. s: the settings screen.
-- q: quit.
+- ?: the list of all keys. q: quit.
+
+The inbox keys do nothing while a dialog is open or while you type in the filter bar. Ctrl+C always quits.
+
+The snooze picker offers 3 hours, tomorrow, in 3 days, next Monday and in a week, on the keys 1 to 5, each with the moment it resolves to. Tab moves to a field that takes any value `snooze --until` accepts. Esc cancels.
