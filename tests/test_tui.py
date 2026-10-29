@@ -266,3 +266,20 @@ async def test_settings_refuse_a_bad_interval(
         await pilot.pause()
         assert isinstance(app.screen, Settings)
     assert not (tmp_path / "config").exists()
+
+
+async def test_c_starts_the_agent_run(db: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("catchup.agent.is_due", lambda config, now: False)
+    start = AsyncMock(return_value=None)
+    monkeypatch.setattr("catchup.agent.start", start)
+
+    app = CatchupApp(Config(agent_prompt="Sync my inbox."))
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        await pilot.press("r")
+        await app.workers.wait_for_complete()
+        assert start.await_count == 0
+        await pilot.press("c")
+        await app.workers.wait_for_complete()
+        assert start.await_count == 1
+        assert "c  catch up now" in text(app, "#footer")

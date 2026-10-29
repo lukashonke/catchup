@@ -117,7 +117,7 @@ agent_every = "1h"  # the default; 30m, 1h, 4h, ...
 
 - With no `agent_prompt`, the UI starts nothing.
 - The command runs in your home directory, in the background, with the prompt on stdin. It keeps running when you close the UI.
-- When the interval has passed since the last start, the UI starts the next run. Press `r` to start one now. If several UIs are open, only one of them starts each run.
+- When the interval has passed since the last start, the UI starts the next run. Press `c` (catch up now) to start one now. If several UIs are open, only one of them starts each run.
 - The header shows when the agent runs and when the next run is due. The output of the last run is in `agent.log` next to the database.
 
 The agent reads messages that other people wrote, so a message can try to talk it into doing something else. The default command uses Claude Code's auto mode, which checks each action before it runs. Do not use `--dangerously-skip-permissions` here.

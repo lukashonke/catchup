@@ -114,5 +114,5 @@ In a narrow terminal the details pane moves below the list. The mouse and the up
 - Enter: Open in Claude.
 - Ctrl+Enter: open the first link in the browser. The terminal must send Ctrl+Enter as its own key (the kitty keyboard protocol); otherwise it arrives as Enter.
 - Space: Done. Backspace: Ignore. Both act only on open and snoozed waiting items.
-- r: start the agent run now. s: the settings screen.
+- c: catch up now, which starts the agent run. s: the settings screen.
 - q: quit.

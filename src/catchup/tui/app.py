@@ -47,7 +47,7 @@ class CatchupApp(App[None]):
         Binding("space", "change('done')", "Done", show=False),
         Binding("backspace", "change('ignore')", "Ignore", show=False),
         Binding("ctrl+enter", "open_link", "Open the first link", show=False),
-        Binding("r", "run_agent", "Run the agent", show=False),
+        Binding("c", "run_agent", "Catch up now", show=False),
         Binding("s", "settings", "Settings", show=False),
         Binding("q", "close", "Quit", show=False),
         Binding("ctrl+c", "quit", "Quit", show=False, priority=True),
@@ -94,7 +94,7 @@ class CatchupApp(App[None]):
             ("ctrl+enter", "link"),
             ("space", "done"),
             ("⌫", "ignore"),
-            *([("r", "run agent now")] if self.config.agent_prompt else []),
+            *([("c", "catch up now")] if self.config.agent_prompt else []),
             ("s", "settings"),
             ("q", "quit"),
         ]
