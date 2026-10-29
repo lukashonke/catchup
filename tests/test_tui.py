@@ -11,8 +11,10 @@ from textual.widgets import Input
 from catchup.config import Config, load_config
 from catchup.store import Kind, Link, Priority, Store, utc_now
 from catchup.tui.app import CatchupApp
+from catchup.tui.dialogs import SnoozePicker
 from catchup.tui.settings import Settings
 from catchup.tui.widgets import Details, ItemList
+from catchup.when import parse_until
 
 
 @pytest.fixture
@@ -318,3 +320,44 @@ async def test_u_undoes_the_latest_state_change(db: Path, monkeypatch: pytest.Mo
         last = store.history(int(first))[-1]
     assert restored.snoozed_until == until.replace(microsecond=0)
     assert (last.action, last.actor, last.note) == ("reopened", "user", "undo")
+
+
+async def test_z_picks_a_snooze_time_or_takes_a_typed_one(db: Path) -> None:
+    picked = add(db, "waiting", "Answer Ken", 2)
+    typed = add(db, "waiting", "Approve the budget", 1)
+    fyi = add(db, "fyi", "Release shipped", 0)
+
+    app = CatchupApp(Config())
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        await pilot.press("z")
+        assert isinstance(app.screen, SnoozePicker)
+        await pilot.press("escape")
+        assert not isinstance(app.screen, SnoozePicker)
+
+        await pilot.press("z", "2")
+        await app.workers.wait_for_complete()
+        await pilot.press("z", "tab", "4", "8", "h", "enter")
+        await app.workers.wait_for_complete()
+        # Only the FYI is left, and FYIs cannot be snoozed.
+        await pilot.press("z")
+        assert not isinstance(app.screen, SnoozePicker)
+        assert ids(app) == [None, None, None, None, fyi]
+
+    with Store(db) as store:
+        tomorrow = parse_until("tomorrow", utc_now())
+        assert store.get(int(picked)).snoozed_until == tomorrow
+        until = store.get(int(typed)).snoozed_until
+    assert until is not None and timedelta(hours=47) < until - utc_now() <= timedelta(hours=48)
+
+
+async def test_snooze_picker_keeps_a_bad_time_open(db: Path) -> None:
+    add(db, "waiting", "Answer Ken", 2)
+
+    app = CatchupApp(Config())
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        await pilot.press("z", "tab", *"2020-01-01", "enter")
+        await pilot.pause()
+        assert isinstance(app.screen, SnoozePicker)
+        assert app.screen.query_one(Input).value == "2020-01-01"

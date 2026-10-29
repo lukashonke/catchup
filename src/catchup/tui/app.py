@@ -1,6 +1,7 @@
 """The Textual app: header, state tabs, the item list and the details pane."""
 
 import sqlite3
+from collections.abc import Callable
 from datetime import datetime
 from typing import ClassVar
 
@@ -19,6 +20,7 @@ from catchup.opener import open_item
 from catchup.store import Item, State, Store, utc_now
 from catchup.tui import theme
 from catchup.tui.data import TABS, Snapshot, StoreThread, load
+from catchup.tui.dialogs import SnoozePicker
 from catchup.tui.settings import Settings
 from catchup.tui.widgets import Details, ItemList, day, day_time
 from catchup.when import parse_every, parse_until
@@ -28,6 +30,17 @@ AGENT_CHECK_SECONDS = 30.0
 NARROW_COLUMNS = 110
 TINY_COLUMNS = 62
 _CHANGED = {"done": "Done", "ignored": "Ignored", "open": "Reopened"}
+
+# A change takes the store and the item id, and returns the changed item.
+Change = Callable[[Store, int], Item]
+_CHANGES: dict[str, Change] = {
+    "done": lambda store, item_id: store.done(item_id, actor="user"),
+    "ignore": lambda store, item_id: store.ignore(item_id, actor="user"),
+    "reopen": lambda store, item_id: store.reopen(item_id, actor="user"),
+    "snooze-1d": lambda store, item_id: _snooze(store, item_id, parse_until("1d", utc_now())),
+    "snooze-3d": lambda store, item_id: _snooze(store, item_id, parse_until("3d", utc_now())),
+    "snooze-mon": lambda store, item_id: _snooze(store, item_id, parse_until("mon", utc_now())),
+}
 
 
 class CatchupApp(App[None]):
@@ -48,6 +61,7 @@ class CatchupApp(App[None]):
         Binding("backspace", "change('ignore')", "Ignore", show=False),
         Binding("ctrl+enter", "open_link", "Open the first link", show=False),
         Binding("u", "undo", "Undo", show=False),
+        Binding("z", "snooze", "Snooze", show=False),
         Binding("c", "run_agent", "Catch up now", show=False),
         Binding("s", "settings", "Settings", show=False),
         Binding("q", "close", "Quit", show=False),
@@ -274,9 +288,16 @@ class CatchupApp(App[None]):
 
     async def action_change(self, action: str) -> None:
         # The keys act only where the details pane shows the matching button.
-        item = self.item
-        if item and item.kind == "waiting" and item.state in ("open", "snoozed"):
-            await self._change(action)
+        if _waiting_open(self.item):
+            await self._change(_CHANGES[action])
+
+    def action_snooze(self) -> None:
+        if self.item and _waiting_open(self.item):
+            self.push_screen(SnoozePicker(self.item.title), self._snooze_picked)
+
+    async def _snooze_picked(self, until: datetime | None) -> None:
+        if until is not None:
+            await self._change(lambda store, item_id: _snooze(store, item_id, until))
 
     def on_item_list_open_requested(self) -> None:
         self._open_in_claude()
@@ -288,24 +309,15 @@ class CatchupApp(App[None]):
         if event.button.id == "open":
             self._open_in_claude()
         else:
-            await self._change(str(event.button.id))
+            await self._change(_CHANGES[str(event.button.id)])
 
-    async def _change(self, action: str) -> None:
-        """Apply a button's state change to the selected item and report it."""
+    async def _change(self, change: Change) -> None:
+        """Apply a state change to the selected item and report it."""
         if self.item is None:
             return
         before = self.item
-        item_id = before.id
-        actions = {
-            "done": lambda store: store.done(item_id, actor="user"),
-            "ignore": lambda store: store.ignore(item_id, actor="user"),
-            "reopen": lambda store: store.reopen(item_id, actor="user"),
-            "snooze-1d": lambda store: _snooze(store, item_id, "1d"),
-            "snooze-3d": lambda store: _snooze(store, item_id, "3d"),
-            "snooze-mon": lambda store: _snooze(store, item_id, "mon"),
-        }
         try:
-            item = await self.store.run(actions[action])
+            item = await self.store.run(lambda store: change(store, before.id))
         except (CatchupError, sqlite3.Error) as e:
             self.notify(str(e), title="Not changed", severity="error", markup=False)
             return
@@ -346,8 +358,12 @@ class CatchupApp(App[None]):
             self.notify(str(e), title=f"{label} failed", severity="error", timeout=12, markup=False)
 
 
-def _snooze(store: Store, item_id: int, until: str) -> Item:
-    return store.snooze(item_id, parse_until(until, utc_now()), actor="user")
+def _snooze(store: Store, item_id: int, until: datetime) -> Item:
+    return store.snooze(item_id, until, actor="user")
+
+
+def _waiting_open(item: Item | None) -> bool:
+    return item is not None and item.kind == "waiting" and item.state in ("open", "snoozed")
 
 
 def _restore(store: Store, item: Item) -> Item:

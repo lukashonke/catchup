@@ -1,0 +1,94 @@
+"""The small dialogs over the inbox: the snooze picker."""
+
+from datetime import datetime
+from typing import ClassVar
+
+from rich.table import Table
+from rich.text import Text
+from textual.app import ComposeResult
+from textual.binding import Binding
+from textual.containers import Vertical
+from textual.content import Content
+from textual.screen import ModalScreen
+from textual.widgets import Input, OptionList, Static
+from textual.widgets.option_list import Option
+
+from catchup import CatchupError
+from catchup.store import utc_now
+from catchup.tui import theme
+from catchup.tui.widgets import day_time
+from catchup.when import parse_until
+
+SNOOZE_CHOICES = (
+    ("3h", "3 hours"),
+    ("tomorrow", "Tomorrow"),
+    ("3d", "In 3 days"),
+    ("mon", "Next Monday"),
+    ("1w", "In a week"),
+)
+
+
+class SnoozePicker(ModalScreen[datetime | None]):
+    """Pick when a snoozed item comes back; dismiss with that moment, or None on cancel."""
+
+    BINDINGS: ClassVar = [
+        Binding("escape", "dismiss(None)", "Cancel", show=False),
+        *(
+            Binding(str(number), f"pick({number - 1})", show=False)
+            for number in range(1, len(SNOOZE_CHOICES) + 1)
+        ),
+    ]
+
+    def __init__(self, title: str) -> None:
+        super().__init__()
+        self.item_title = title
+
+    def compose(self) -> ComposeResult:
+        now = utc_now()
+        with Vertical(classes="dialog"):
+            yield Static("Snooze until", classes="dialog-title")
+            yield Static(Content(self.item_title), classes="dialog-hint")
+            yield OptionList(
+                *(
+                    Option(_choice(number, label, parse_until(value, now)))
+                    for number, (value, label) in enumerate(SNOOZE_CHOICES, 1)
+                ),
+                id="snooze-choices",
+            )
+            yield Input(placeholder="or type 3h, 2d, 1w, mon, tomorrow, YYYY-MM-DD", id="snooze-at")
+            yield Static("1-5 pick · tab type a time · esc cancel", classes="dialog-keys")
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        # Digits belong to the time being typed, not to the choices.
+        return action != "pick" or not isinstance(self.focused, Input)
+
+    def action_pick(self, index: int) -> None:
+        self.dismiss(parse_until(SNOOZE_CHOICES[index][0], utc_now()))
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        event.stop()
+        self.action_pick(event.option_index)
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        event.stop()
+        try:
+            until = parse_until(event.value.strip(), utc_now())
+            if until <= utc_now():
+                raise CatchupError(f"{event.value.strip()} is in the past; pick a later time")
+        except CatchupError as e:
+            self.notify(str(e), title="Not snoozed", severity="error", markup=False)
+            return
+        self.dismiss(until)
+
+
+def _choice(number: int, label: str, until: datetime) -> Table:
+    grid = Table.grid(expand=True, padding=(0, 1))
+    grid.add_column(width=1)
+    grid.add_column(ratio=1)
+    grid.add_column(justify="right")
+    grid.add_row(
+        Text(str(number), style=f"bold {theme.ACCENT}"),
+        Text(label),
+        Text(day_time(until), style=theme.DIM),
+    )
+    return grid

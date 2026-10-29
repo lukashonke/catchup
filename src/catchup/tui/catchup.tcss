@@ -262,3 +262,60 @@ Settings {
         }
     }
 }
+
+SnoozePicker {
+    align: center middle;
+    background: $chrome 60%;
+}
+
+.dialog {
+    width: 60;
+    max-width: 100%;
+    height: auto;
+    max-height: 100%;
+    padding: 1 2;
+    background: $panel;
+    border: solid $line;
+    & > .dialog-title {
+        color: $bright;
+        text-style: bold;
+    }
+    & > .dialog-hint, & > .dialog-keys {
+        color: $dim;
+    }
+    & > .dialog-keys {
+        margin-top: 1;
+    }
+    & > OptionList {
+        height: auto;
+        margin-top: 1;
+        border: none;
+        padding: 0;
+        background: $panel;
+        & > .option-list--option {
+            padding: 0 1;
+        }
+        & > .option-list--option-highlighted,
+        &:focus > .option-list--option-highlighted {
+            color: $foreground;
+            background: $selected;
+            text-style: none;
+        }
+        & > .option-list--option-hover {
+            background: $hover;
+        }
+        &:focus {
+            background-tint: transparent;
+        }
+    }
+    & > Input {
+        margin-top: 1;
+        border: none;
+        height: 1;
+        padding: 0 1;
+        background: $button;
+        &:focus {
+            background: $selected;
+        }
+    }
+}
