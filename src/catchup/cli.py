@@ -23,8 +23,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command is None:
         from catchup.tui import run  # Lazy, so agent commands never pay for importing Textual.
 
-        run()
-        return 0
+        return run()
     try:
         _read_stdin_values(args)
         with Store() as store:

@@ -1,0 +1,189 @@
+Screen {
+    background: $background;
+    color: $foreground;
+}
+
+#bar {
+    height: 2;
+    padding: 1 2 0 2;
+}
+
+#summary {
+    width: 1fr;
+}
+
+#last-run {
+    width: auto;
+    color: $dim;
+}
+
+#tabs {
+    padding: 1 2 0 1;
+    border-bottom: solid $line;
+    height: 3;
+}
+
+#panes {
+    height: 1fr;
+}
+
+#list {
+    width: 1fr;
+    height: 1fr;
+    max-height: 100%;
+    border: none;
+    padding: 1 1 0 1;
+    background: $background;
+    scrollbar-size-vertical: 1;
+    scrollbar-background: $background;
+    scrollbar-color: $line;
+    & > .option-list--option {
+        padding: 0 1;
+    }
+    & > .option-list--option-highlighted,
+    &:focus > .option-list--option-highlighted {
+        color: $foreground;
+        background: $selected;
+        text-style: none;
+    }
+    & > .option-list--option-hover {
+        background: $hover;
+    }
+    & > .option-list--option-disabled {
+        color: $faint;
+    }
+    &:focus {
+        background-tint: transparent;
+    }
+}
+
+#details {
+    width: 1fr;
+    min-width: 62;
+    height: 1fr;
+    border-left: solid $line;
+    padding: 1 2;
+    scrollbar-size-vertical: 1;
+    scrollbar-background: $background;
+    scrollbar-color: $line;
+    & > * {
+        height: auto;
+    }
+    & > #d-empty {
+        display: none;
+        color: $faint;
+    }
+    & > .-hidden, &.-empty > * {
+        display: none;
+    }
+    &.-empty > #d-empty {
+        display: block;
+    }
+}
+
+#d-title {
+    color: $bright;
+    text-style: bold;
+}
+
+#d-meta {
+    color: $dim;
+    margin-bottom: 1;
+}
+
+#d-body {
+    margin: 0;
+    padding: 0;
+    background: $background;
+    & MarkdownParagraph {
+        margin: 0 0 1 0;
+    }
+}
+
+#d-links {
+    margin-bottom: 1;
+}
+
+#d-actions {
+    height: auto;
+    margin-bottom: 1;
+    & > Button {
+        margin-right: 1;
+        min-width: 0;
+        width: auto;
+        padding: 0;
+        background: $button;
+        color: $foreground;
+        text-style: none;
+        &:hover {
+            background: $selected;
+        }
+        &.primary {
+            background: $accent;
+            color: $background;
+            text-style: bold;
+        }
+        &.small {
+            color: $dim;
+        }
+    }
+    & > #snooze-label {
+        color: $dim;
+        margin-right: 1;
+    }
+}
+
+.label {
+    color: $faint;
+    text-style: bold;
+}
+
+#d-prompt {
+    color: $dim;
+    border-left: solid $line;
+    padding-left: 1;
+    margin-bottom: 1;
+}
+
+#footer {
+    height: 1;
+    padding: 0 2;
+    background: $chrome;
+    color: $dim;
+}
+
+/* Below NARROW_COLUMNS the details pane moves below the list. */
+Screen.-narrow {
+    & #panes {
+        layout: vertical;
+    }
+    & #list {
+        width: 1fr;
+        height: auto;
+        max-height: 45%;
+        padding-bottom: 1;
+    }
+    & #details {
+        width: 1fr;
+        min-width: 0;
+        border-left: none;
+        border-top: solid $line;
+    }
+}
+
+Toast {
+    background: $button;
+    padding: 0 1;
+    &.-information {
+        border-left: outer $accent;
+        & .toast--title {
+            color: $accent;
+        }
+    }
+    &.-error {
+        border-left: outer $error;
+        & .toast--title {
+            color: $error;
+        }
+    }
+}

@@ -136,6 +136,6 @@ def test_malformed_link_is_a_usage_error(capsys: pytest.CaptureFixture[str]) -> 
 
 def test_no_command_starts_the_tui(monkeypatch: pytest.MonkeyPatch) -> None:
     started = []
-    monkeypatch.setattr("catchup.tui.run", lambda: started.append(True))
+    monkeypatch.setattr("catchup.tui.run", lambda: started.append(True) or 0)
     assert main([]) == 0
     assert started == [True]
