@@ -112,8 +112,8 @@ def test_human_list_line(capsys: pytest.CaptureFixture[str]) -> None:
     capsys.readouterr()
     assert main(["list", "--kind=all"]) == 0
     assert capsys.readouterr().out.splitlines() == [
-        "   #1 ! waiting/open      0m  Review  [MR]",
-        "   #2   fyi               0m  Deployed",
+        "   #1 ! waiting/open     now  Review  [MR]",
+        "   #2   fyi              now  Deployed",
     ]
 
 

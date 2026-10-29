@@ -1,6 +1,6 @@
 """The list of items and the details pane."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import ClassVar
 
 from rich.console import Console, ConsoleOptions, RenderResult
@@ -207,11 +207,16 @@ def _meta(item: Item, now: datetime) -> Content:
         state = str(item.state)
     parts = [
         Content.styled(f" {state} ", f"{theme.FOREGROUND} on {theme.SELECTED}"),
-        Content(f" · first seen {day(item.created_at)} · {format_age(now - item.created_at)} ago"),
+        Content(f" · first seen {day(item.created_at)} · {_ago(now - item.created_at)}"),
     ]
     if item.kind == "waiting" and item.priority == "urgent":
         parts += [Content(" · "), Content.styled("urgent", theme.URGENT)]
     return Content.assemble(*parts)
+
+
+def _ago(elapsed: timedelta) -> str:
+    age = format_age(elapsed)
+    return "just now" if age == "now" else f"{age} ago"
 
 
 def _links(item: Item) -> Content:

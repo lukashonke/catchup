@@ -1,11 +1,11 @@
 import time
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from catchup import CatchupError
-from catchup.when import parse_since, parse_until
+from catchup.when import format_age, parse_since, parse_until
 
 # Wednesday 2026-10-28 23:30 in Prague (CET, UTC+1, after the DST switch on 10-25).
 NOW = datetime(2026, 10, 28, 22, 30, tzinfo=UTC)
@@ -61,3 +61,13 @@ def test_rejects_unknown_forms(text: str) -> None:
 def test_since_rejects_mon() -> None:
     with pytest.raises(CatchupError):
         parse_since("mon", NOW)
+
+
+def test_format_age_rounds_down_and_says_now_under_a_minute() -> None:
+    assert [format_age(timedelta(seconds=s)) for s in (59, 60, 3599, 3600, 86400 * 3)] == [
+        "now",
+        "1m",
+        "59m",
+        "1h",
+        "3d",
+    ]

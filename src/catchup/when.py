@@ -38,8 +38,10 @@ def _local_start_of(day: date) -> datetime:
 
 
 def format_age(elapsed: timedelta) -> str:
-    """Return a short age such as `5m`, `3h` or `2d`, rounded down."""
+    """Return a short age such as `now`, `5m`, `3h` or `2d`, rounded down."""
     minutes = max(0, int(elapsed.total_seconds() // 60))
+    if minutes == 0:
+        return "now"
     if minutes < 60:
         return f"{minutes}m"
     if minutes < 24 * 60:
