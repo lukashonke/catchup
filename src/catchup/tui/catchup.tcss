@@ -107,7 +107,11 @@ Screen {
 #d-actions {
     height: auto;
     margin-bottom: 1;
-    & > Button {
+    & > Horizontal {
+        width: auto;
+        height: auto;
+    }
+    & Button {
         margin-right: 1;
         min-width: 0;
         width: auto;
@@ -127,7 +131,7 @@ Screen {
             color: $dim;
         }
     }
-    & > #snooze-label {
+    & #snooze-label {
         color: $dim;
         margin-right: 1;
     }
@@ -153,7 +157,7 @@ Screen {
 }
 
 /* Below NARROW_COLUMNS the details pane moves below the list. */
-Screen.-narrow {
+Screen.-narrow, Screen.-tiny {
     & #panes {
         layout: vertical;
     }
@@ -186,4 +190,9 @@ Toast {
             color: $error;
         }
     }
+}
+
+/* Below TINY_COLUMNS the snooze and ignore buttons wrap to a second line. */
+Screen.-tiny #d-actions {
+    layout: vertical;
 }

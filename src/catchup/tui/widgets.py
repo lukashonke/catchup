@@ -3,6 +3,7 @@
 from datetime import datetime
 from typing import ClassVar
 
+from rich.console import Console, ConsoleOptions, RenderResult
 from rich.table import Table
 from rich.text import Text
 from textual.app import ComposeResult
@@ -48,6 +49,21 @@ def age_color(item: Item, now: datetime) -> str:
     return theme.URGENT if days >= 7 else theme.ACCENT
 
 
+class _Line:
+    """One line of text cut to the width it gets, so the ellipsis never follows a space."""
+
+    def __init__(self, text: Text) -> None:
+        self.text = text
+
+    def __rich_console__(self, console: Console, options: ConsoleOptions) -> RenderResult:
+        text = self.text.copy()
+        if text.cell_len > options.max_width:
+            text.truncate(options.max_width - 1)
+            text.rstrip()
+            text.append("…")
+        yield text
+
+
 def _row(item: Item, now: datetime) -> Table:
     fyi = item.kind == "fyi"
     if fyi:
@@ -60,12 +76,12 @@ def _row(item: Item, now: datetime) -> Table:
     link_type = item.links[0].type or "" if item.links else ""
     grid = Table.grid(expand=True, padding=(0, 1))
     grid.add_column(width=1, no_wrap=True)
-    grid.add_column(ratio=1, no_wrap=True, overflow="ellipsis")
+    grid.add_column(ratio=1)
     grid.add_column(width=8, no_wrap=True)
     grid.add_column(width=4, no_wrap=True, justify="right")
     grid.add_row(
         marker,
-        Text(item.title, style=theme.FEED if fyi else ""),
+        _Line(Text(item.title, style=theme.FEED if fyi else "")),
         Text(link_type, style=theme.LINK_COLORS.get(link_type, theme.DIM)),
         Text(format_age(now - item.created_at), style=age_color(item, now)),
     )
@@ -136,15 +152,18 @@ class Details(VerticalScroll):
         yield Static(id="d-meta")
         yield Markdown(id="d-body")
         yield Static(id="d-links")
+        # Two groups, so a narrow pane can put the second one on its own line.
         with Horizontal(id="d-actions"):
-            yield Button("Open in Claude", id="open", classes="primary", compact=True)
-            yield Button("Done", id="done", compact=True)
-            yield Label("Snooze", id="snooze-label")
-            yield Button("1d", id="snooze-1d", classes="small", compact=True)
-            yield Button("3d", id="snooze-3d", classes="small", compact=True)
-            yield Button("Mon", id="snooze-mon", classes="small", compact=True)
-            yield Button("Ignore", id="ignore", compact=True)
-            yield Button("Reopen", id="reopen", compact=True)
+            with Horizontal(id="actions-main"):
+                yield Button("Open in Claude", id="open", classes="primary", compact=True)
+                yield Button("Done", id="done", compact=True)
+                yield Button("Reopen", id="reopen", compact=True)
+            with Horizontal(id="actions-more"):
+                yield Label("Snooze", id="snooze-label")
+                yield Button("1d", id="snooze-1d", classes="small", compact=True)
+                yield Button("3d", id="snooze-3d", classes="small", compact=True)
+                yield Button("Mon", id="snooze-mon", classes="small", compact=True)
+                yield Button("Ignore", id="ignore", compact=True)
         yield Static(id="d-prompt-label", classes="label")
         yield Static(id="d-prompt")
         yield Static("HISTORY", id="d-history-label", classes="label")
@@ -167,8 +186,8 @@ class Details(VerticalScroll):
 
         waiting_open = item.kind == "waiting" and item.state in ("open", "snoozed")
         closed = item.kind == "waiting" and not waiting_open
-        for name in ("done", "snooze-label", "snooze-1d", "snooze-3d", "snooze-mon", "ignore"):
-            self.query_one(f"#{name}").display = waiting_open
+        self.query_one("#done").display = waiting_open
+        self.query_one("#actions-more").display = waiting_open
         self.query_one("#reopen").display = closed
         # On an FYI, Open in Claude is the only action, so it does not need to stand out.
         self.query_one("#open").set_class(item.kind == "waiting", "primary")

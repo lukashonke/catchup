@@ -128,6 +128,21 @@ async def test_narrow_terminal_puts_details_below_the_list(db: Path) -> None:
         assert details.x >= item_list.right and details.y == item_list.y
 
 
+async def test_tiny_terminal_wraps_buttons_and_truncates_titles_at_a_word(db: Path) -> None:
+    add(db, "waiting", "The staging database moves to the new cluster on Thursday", 1)
+
+    app = CatchupApp(Config())
+    async with app.run_test(size=(50, 40)) as pilot:
+        await pilot.pause()
+        main, more = app.query_one("#actions-main").region, app.query_one("#actions-more").region
+        assert more.y > main.y
+        details = app.query_one("#details").region
+        assert all(button.region.right <= details.right for button in app.query("Button"))
+
+        row = text(app, "#list").splitlines()[1]
+        assert "…" in row and " …" not in row
+
+
 async def test_poll_shows_new_items_and_keeps_the_selection(db: Path) -> None:
     add(db, "waiting", "Answer Ken", 2)
     selected = add(db, "waiting", "Approve the budget", 1)

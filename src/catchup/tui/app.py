@@ -23,6 +23,7 @@ from catchup.when import parse_until
 
 POLL_SECONDS = 2.0
 NARROW_COLUMNS = 110
+TINY_COLUMNS = 62
 _CHANGED = {"done": "Done", "ignored": "Ignored", "open": "Reopened"}
 
 
@@ -32,7 +33,11 @@ class CatchupApp(App[None]):
     CSS_PATH = "catchup.tcss"
     TITLE = "catchup"
     ENABLE_COMMAND_PALETTE = False
-    HORIZONTAL_BREAKPOINTS = [(0, "-narrow"), (NARROW_COLUMNS, "-wide")]  # noqa: RUF012
+    HORIZONTAL_BREAKPOINTS = [  # noqa: RUF012
+        (0, "-tiny"),
+        (TINY_COLUMNS, "-narrow"),
+        (NARROW_COLUMNS, "-wide"),
+    ]
     BINDINGS: ClassVar = [Binding("ctrl+c", "quit", "Quit", show=False, priority=True)]
 
     def __init__(self, config: Config) -> None:
