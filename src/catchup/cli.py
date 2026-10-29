@@ -6,13 +6,13 @@ import sqlite3
 import sys
 from collections.abc import Sequence
 from dataclasses import asdict
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import get_args
 
 from catchup import CatchupError
 from catchup.links import Link, parse_link
 from catchup.store import Event, Item, Kind, Priority, State, Store, default_db_path, utc_now
-from catchup.when import parse_since, parse_until
+from catchup.when import format_age, parse_since, parse_until
 
 _MARKERS = {"urgent": "!", "low": "↓"}
 
@@ -215,7 +215,7 @@ def _line(item: Item, now: datetime) -> str:
     marker = _MARKERS.get(item.priority, " ") if item.kind == "waiting" else " "
     kind_state = f"waiting/{item.state}" if item.kind == "waiting" else "fyi"
     link_type = f"  [{item.links[0].type}]" if item.links else ""
-    age = _age(now - item.created_at)
+    age = format_age(now - item.created_at)
     return f"{'#' + str(item.id):>5} {marker} {kind_state:<15} {age:>4}  {item.title}{link_type}"
 
 
@@ -247,15 +247,6 @@ def _details(item: Item, events: list[Event]) -> str:
         note = f"  {event.note}" if event.note else ""
         lines.append(f"  {_local(event.at)}  {event.actor:<5}  {event.action:<8}{note}".rstrip())
     return "\n".join(lines)
-
-
-def _age(elapsed: timedelta) -> str:
-    minutes = max(0, int(elapsed.total_seconds() // 60))
-    if minutes < 60:
-        return f"{minutes}m"
-    if minutes < 24 * 60:
-        return f"{minutes // 60}h"
-    return f"{minutes // (24 * 60)}d"
 
 
 def _local(moment: datetime) -> str:

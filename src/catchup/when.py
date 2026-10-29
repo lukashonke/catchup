@@ -1,4 +1,4 @@
-"""Parsing of the `--until` and `--since` values into UTC timestamps."""
+"""Parsing of the `--until` and `--since` values into UTC timestamps, and showing ages."""
 
 import re
 from datetime import UTC, date, datetime, time, timedelta
@@ -35,3 +35,13 @@ def _parse(text: str, now: datetime, sign: int, forms: str) -> datetime:
 def _local_start_of(day: date) -> datetime:
     # A naive datetime passed to astimezone() is read as local time, with DST applied.
     return datetime.combine(day, time()).astimezone().astimezone(UTC)
+
+
+def format_age(elapsed: timedelta) -> str:
+    """Return a short age such as `5m`, `3h` or `2d`, rounded down."""
+    minutes = max(0, int(elapsed.total_seconds() // 60))
+    if minutes < 60:
+        return f"{minutes}m"
+    if minutes < 24 * 60:
+        return f"{minutes // 60}h"
+    return f"{minutes // (24 * 60)}d"
