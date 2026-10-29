@@ -79,7 +79,9 @@ def _parser() -> argparse.ArgumentParser:
     sub.add_parser("ignore", parents=[item_id, writer], help="mute a waiting item")
     sub.add_parser("reopen", parents=[item_id, writer], help="make a waiting item open again")
     snooze = sub.add_parser("snooze", parents=[item_id, writer], help="hide a waiting item")
-    snooze.add_argument("--until", required=True, help="1d, 3d, 1w, mon or YYYY-MM-DD")
+    snooze.add_argument(
+        "--until", required=True, help="3h, 1d, 3d, 1w, mon, tomorrow or YYYY-MM-DD"
+    )
     return parser
 
 

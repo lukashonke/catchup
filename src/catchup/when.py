@@ -6,16 +6,21 @@ from datetime import UTC, date, datetime, time, timedelta
 from catchup import CatchupError
 
 _RELATIVE = re.compile(r"(\d+)([dw])")
+_HOURS = re.compile(r"(\d+)h")
 _INTERVAL = re.compile(r"(\d+)([mh])")
 
 
 def parse_until(text: str, now: datetime) -> datetime:
-    """Return the future moment that `Nd`, `Nw`, `mon` or `YYYY-MM-DD` names, in UTC."""
+    """Return the future moment that `Nh`, `Nd`, `Nw`, `mon`, `tomorrow` or a date names, in UTC."""
+    today = now.astimezone().date()
     if text == "mon":
-        today = now.astimezone().date()
         # On a Monday, "mon" means the following Monday, not today.
         return _local_start_of(today + timedelta(days=7 - today.weekday()))
-    return _parse(text, now, sign=1, forms="1d, 3d, 1w, mon or YYYY-MM-DD")
+    if text == "tomorrow":
+        return _local_start_of(today + timedelta(days=1))
+    if match := _HOURS.fullmatch(text):
+        return now.astimezone(UTC) + timedelta(hours=int(match[1]))
+    return _parse(text, now, sign=1, forms="3h, 1d, 3d, 1w, mon, tomorrow or YYYY-MM-DD")
 
 
 def parse_since(text: str, now: datetime) -> datetime:

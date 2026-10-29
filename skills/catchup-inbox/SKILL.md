@@ -83,7 +83,7 @@ catchup add --kind waiting|fyi --title TEXT [--body TEXT|-] [--priority urgent|n
 catchup update ID [--title TEXT] [--body TEXT|-] [--priority P] [--link "[type:]label=url"]... [--prompt TEXT|-] [--note TEXT] [--json]
 catchup done ID [--note TEXT] [--json]
 catchup reopen ID [--note TEXT] [--json]
-catchup snooze ID --until 1d|3d|1w|mon|YYYY-MM-DD [--note TEXT] [--json]
+catchup snooze ID --until 3h|1d|3d|1w|mon|tomorrow|YYYY-MM-DD [--note TEXT] [--json]
 catchup ignore ID [--note TEXT] [--json]
 catchup list [--state open|snoozed|done|ignored|all] [--kind waiting|fyi|all] [--since 1d|3d|1w|YYYY-MM-DD] [--json]
 catchup show ID [--json]

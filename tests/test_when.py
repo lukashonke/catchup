@@ -23,10 +23,13 @@ def prague_time(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
+        ("3h", datetime(2026, 10, 29, 1, 30, tzinfo=UTC)),
         ("1d", datetime(2026, 10, 29, 22, 30, tzinfo=UTC)),
         ("3d", datetime(2026, 10, 31, 22, 30, tzinfo=UTC)),
         ("1w", datetime(2026, 11, 4, 22, 30, tzinfo=UTC)),
         ("mon", datetime(2026, 11, 1, 23, 0, tzinfo=UTC)),
+        # Half an hour before midnight in Prague, tomorrow starts in 30 minutes.
+        ("tomorrow", datetime(2026, 10, 28, 23, 0, tzinfo=UTC)),
         ("2026-11-03", datetime(2026, 11, 2, 23, 0, tzinfo=UTC)),
         # Before the DST switch Prague is UTC+2.
         ("2026-10-20", datetime(2026, 10, 19, 22, 0, tzinfo=UTC)),
@@ -52,7 +55,7 @@ def test_parse_since() -> None:
     assert parse_since("2026-10-01", NOW) == datetime(2026, 9, 30, 22, 0, tzinfo=UTC)
 
 
-@pytest.mark.parametrize("text", ["tomorrow", "1h", "d", "2026-13-01"])
+@pytest.mark.parametrize("text", ["today", "30m", "h", "d", "2026-13-01"])
 def test_rejects_unknown_forms(text: str) -> None:
     with pytest.raises(CatchupError, match="cannot read"):
         parse_until(text, NOW)

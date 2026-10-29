@@ -124,7 +124,7 @@ def test_errors_go_to_stderr_with_next_step(capsys: pytest.CaptureFixture[str]) 
     assert "item 7 does not exist; run `catchup list --state all --kind all`" in captured.err
 
     assert main(["snooze", "7", "--until=someday"]) == 1
-    assert "use 1d, 3d, 1w, mon or YYYY-MM-DD" in capsys.readouterr().err
+    assert "use 3h, 1d, 3d, 1w, mon, tomorrow or YYYY-MM-DD" in capsys.readouterr().err
 
 
 def test_malformed_link_is_a_usage_error(capsys: pytest.CaptureFixture[str]) -> None:
