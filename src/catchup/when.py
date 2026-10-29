@@ -1,0 +1,37 @@
+"""Parsing of the `--until` and `--since` values into UTC timestamps."""
+
+import re
+from datetime import UTC, date, datetime, time, timedelta
+
+from catchup import CatchupError
+
+_RELATIVE = re.compile(r"(\d+)([dw])")
+
+
+def parse_until(text: str, now: datetime) -> datetime:
+    """Return the future moment that `Nd`, `Nw`, `mon` or `YYYY-MM-DD` names, in UTC."""
+    if text == "mon":
+        today = now.astimezone().date()
+        # On a Monday, "mon" means the following Monday, not today.
+        return _local_start_of(today + timedelta(days=7 - today.weekday()))
+    return _parse(text, now, sign=1, forms="1d, 3d, 1w, mon or YYYY-MM-DD")
+
+
+def parse_since(text: str, now: datetime) -> datetime:
+    """Return the past moment that `Nd`, `Nw` or `YYYY-MM-DD` names, in UTC."""
+    return _parse(text, now, sign=-1, forms="1d, 3d, 1w or YYYY-MM-DD")
+
+
+def _parse(text: str, now: datetime, sign: int, forms: str) -> datetime:
+    if match := _RELATIVE.fullmatch(text):
+        days = int(match[1]) * (7 if match[2] == "w" else 1)
+        return now.astimezone(UTC) + sign * timedelta(days=days)
+    try:
+        return _local_start_of(date.fromisoformat(text))
+    except ValueError:
+        raise CatchupError(f"cannot read {text!r} as a time; use {forms}") from None
+
+
+def _local_start_of(day: date) -> datetime:
+    # A naive datetime passed to astimezone() is read as local time, with DST applied.
+    return datetime.combine(day, time()).astimezone().astimezone(UTC)
