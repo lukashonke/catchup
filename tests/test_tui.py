@@ -8,7 +8,7 @@ import pytest
 from textual.geometry import Region
 
 from catchup.config import Config
-from catchup.store import Kind, Priority, Store, utc_now
+from catchup.store import Kind, Link, Priority, Store, utc_now
 from catchup.tui.app import CatchupApp
 from catchup.tui.widgets import Details, ItemList
 
@@ -182,3 +182,42 @@ async def test_closing_while_a_store_read_is_in_flight_does_not_fail(
         monkeypatch.setattr(app.store, "run", run_until_shutdown)
         await pilot.press("down")
         app.run_worker(app.poll())
+
+
+async def test_keys_close_items_and_switch_tabs(db: Path) -> None:
+    done = add(db, "waiting", "Answer Ken", 2)
+    ignored = add(db, "waiting", "Approve the budget", 1)
+    fyi = add(db, "fyi", "Release shipped", 0)
+
+    app = CatchupApp(Config())
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        await pilot.press("space")
+        await app.workers.wait_for_complete()
+        await pilot.press("backspace")
+        await app.workers.wait_for_complete()
+        # The FYI is selected now, and FYIs have no state to change.
+        await pilot.press("space")
+        await app.workers.wait_for_complete()
+        assert ids(app) == [None, None, None, None, fyi]
+
+        await pilot.press("left", "right", "right")
+        await app.workers.wait_for_complete()
+        assert app.tab == "done" and ids(app) == [done]
+        await pilot.press("right", "right")
+        await app.workers.wait_for_complete()
+        assert app.tab == "ignored" and ids(app) == [ignored]
+
+
+async def test_ctrl_enter_opens_the_first_link(db: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    with Store(db) as store:
+        store.add("waiting", "Review !412", links=[Link("!412", "https://example.com/mr/412")])
+
+    app = CatchupApp(Config(open_label="Open in Codex"))
+    async with app.run_test(size=(140, 40)) as pilot:
+        opened: list[str] = []
+        monkeypatch.setattr(app, "open_url", opened.append)
+        await pilot.pause()
+        await pilot.press("ctrl+enter")
+        assert opened == ["https://example.com/mr/412"]
+        assert "Open in Codex" in text(app, "#open")

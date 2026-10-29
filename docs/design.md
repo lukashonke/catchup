@@ -79,6 +79,8 @@ catchup snooze ID --until 1d|3d|1w|mon|YYYY-MM-DD [--note TEXT]
 # The command that "Open in Claude" runs, as a list of arguments.
 # catchup passes the item in CATCHUP_ID, CATCHUP_TITLE, CATCHUP_PROMPT and CATCHUP_LINKS (one URL per line).
 open_command = ["/path/to/my-opener.sh"]
+# The name of that action on the button, in the footer and in notifications.
+open_label = "Open in Codex"
 ```
 
 If `open_command` is not set and the TUI runs inside herdr (`HERDR_ENV=1`), catchup uses its bundled herdr opener. That opener creates a herdr tab in the current workspace, labeled with the item title, in the home directory, and starts Claude in it with the prompt. Outside herdr with no config, the button tells you how to set `open_command`.
@@ -95,4 +97,10 @@ The TUI is a two-pane view:
 - **Details**, on the right: the title, the state, when it was first seen, the body, the links as clickable chips with their type, the buttons, the prompt that "Open in Claude" will send, and the history.
 - **Buttons** for a waiting item: Open in Claude, Done, Snooze (1d, 3d, until Monday), Ignore. For done and ignored items: Open in Claude and Reopen. For an FYI: Open in Claude only.
 
-In a narrow terminal the details pane moves below the list. Arrow keys and the mouse select items, and Enter is the same as "Open in Claude", and q quits. The first version has no other shortcuts.
+In a narrow terminal the details pane moves below the list. The mouse and the up and down keys select items. The keys:
+
+- Left and right: the previous and the next state tab.
+- Enter: Open in Claude.
+- Ctrl+Enter: open the first link in the browser. The terminal must send Ctrl+Enter as its own key (the kitty keyboard protocol); otherwise it arrives as Enter.
+- Space: Done. Backspace: Ignore. Both act only on open and snoozed waiting items.
+- q: quit.

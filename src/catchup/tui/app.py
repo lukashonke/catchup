@@ -39,6 +39,11 @@ class CatchupApp(App[None]):
         (NARROW_COLUMNS, "-wide"),
     ]
     BINDINGS: ClassVar = [
+        Binding("left", "tab(-1)", "Previous tab", show=False),
+        Binding("right", "tab(1)", "Next tab", show=False),
+        Binding("space", "change('done')", "Done", show=False),
+        Binding("backspace", "change('ignore')", "Ignore", show=False),
+        Binding("ctrl+enter", "open_link", "Open the first link", show=False),
         Binding("q", "quit", "Quit", show=False),
         Binding("ctrl+c", "quit", "Quit", show=False, priority=True),
     ]
@@ -64,16 +69,25 @@ class CatchupApp(App[None]):
         with Horizontal(id="panes"):
             yield ItemList(id="list")
             yield Details(id="details")
+        keys = [
+            ("↑↓", "select"),
+            ("←→", "tab"),
+            ("enter", self.config.open_label),
+            ("ctrl+enter", "first link"),
+            ("space", "done"),
+            ("⌫", "ignore"),
+            ("q", "quit"),
+        ]
         yield Static(
-            Content.from_markup(
-                "[b $ink on $dim] ↑↓ [/] select  [b $ink on $dim] enter [/] open in"
-                " Claude  [b $ink on $dim] click [/] a link to open it"
-                "  [b $ink on $dim] q [/] quit"
+            Content("  ").join(
+                Content.assemble((f" {key} ", f"bold {theme.INK} on {theme.DIM}"), f" {what}")
+                for key, what in keys
             ),
             id="footer",
         )
 
     async def on_mount(self) -> None:
+        self.query_one("#open", Button).label = self.config.open_label
         self.query_one(ItemList).focus()
         await self.reload()
         self.set_interval(POLL_SECONDS, self.poll)
@@ -166,6 +180,21 @@ class CatchupApp(App[None]):
             await self.reload()
         self.query_one(ItemList).focus()
 
+    async def action_tab(self, step: int) -> None:
+        index = TABS.index(self.tab) + step
+        if 0 <= index < len(TABS):
+            await self.show_tab(TABS[index])
+
+    def action_open_link(self) -> None:
+        if self.item and self.item.links:
+            self.open_url(self.item.links[0].url)
+
+    async def action_change(self, action: str) -> None:
+        # The keys act only where the details pane shows the matching button.
+        item = self.item
+        if item and item.kind == "waiting" and item.state in ("open", "snoozed"):
+            await self._change(action)
+
     def on_item_list_open_requested(self) -> None:
         self._open_in_claude()
 
@@ -175,6 +204,12 @@ class CatchupApp(App[None]):
             return
         if event.button.id == "open":
             self._open_in_claude()
+        else:
+            await self._change(str(event.button.id))
+
+    async def _change(self, action: str) -> None:
+        """Apply a button's state change to the selected item and report it."""
+        if self.item is None:
             return
         item_id = self.item.id
         actions = {
@@ -186,7 +221,7 @@ class CatchupApp(App[None]):
             "snooze-mon": lambda store: _snooze(store, item_id, "mon"),
         }
         try:
-            item = await self.store.run(actions[str(event.button.id)])
+            item = await self.store.run(actions[action])
         except (CatchupError, sqlite3.Error) as e:
             self.notify(str(e), title="Not changed", severity="error", markup=False)
             return
@@ -204,13 +239,12 @@ class CatchupApp(App[None]):
         if item is None:
             return
         # Titles and errors quote other people's messages, so they are never read as markup.
-        self.notify(item.title, title="Opening in Claude", markup=False)
+        label = self.config.open_label
+        self.notify(item.title, title=label, markup=False)
         try:
             await open_item(item, self.config)
         except CatchupError as e:
-            self.notify(
-                str(e), title="Open in Claude failed", severity="error", timeout=12, markup=False
-            )
+            self.notify(str(e), title=f"{label} failed", severity="error", timeout=12, markup=False)
 
 
 def _snooze(store: Store, item_id: int, until: str) -> Item:

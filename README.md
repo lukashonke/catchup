@@ -22,6 +22,8 @@ uv tool install git+https://github.com/lukashonke/catchup
    catchup
    ```
 
+   Up and down select an item, left and right switch the state tab. Enter opens the item in Claude, Ctrl+Enter opens its first link, Space marks it done, Backspace ignores it, and q quits.
+
 2. In another terminal, add an item by hand. The UI shows it at once.
 
    ```sh
@@ -69,10 +71,11 @@ Run `catchup --help` and `catchup COMMAND --help` for every option.
 
 ## Open in Claude
 
-"Open in Claude" in the UI (or Enter on an item) runs a command that starts a coding agent with the item's prompt. Set the command in `~/.config/catchup/config.toml`, as a list of arguments:
+"Open in Claude" in the UI (or Enter on an item) runs a command that starts a coding agent with the item's prompt. Set the command in `~/.config/catchup/config.toml`, as a list of arguments, and optionally rename the button:
 
 ```toml
 open_command = ["/path/to/my-opener.sh"]
+open_label = "Open in Codex"
 ```
 
 Catchup runs the command without a shell and passes the item in environment variables:
