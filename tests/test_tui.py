@@ -415,3 +415,14 @@ async def test_new_items_get_a_dot_until_selected_for_a_moment(
         await app.workers.wait_for_complete()
         assert "· 1 new" in text(app, "#summary")
         assert text(app, "#list").splitlines()[2].split()[0] == "•"
+
+
+async def test_tab_moves_between_settings_fields(db: Path) -> None:
+    app = CatchupApp(Config())
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        await pilot.press("s")
+        await pilot.pause()
+        first = app.focused
+        await pilot.press("tab")
+        assert app.focused is not first and isinstance(app.focused, Input)

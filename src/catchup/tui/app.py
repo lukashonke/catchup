@@ -12,6 +12,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.content import Content
+from textual.screen import ModalScreen
 from textual.style import Style
 from textual.timer import Timer
 from textual.widgets import Button, OptionList, Static
@@ -129,8 +130,10 @@ class CatchupApp(App[None]):
         )
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
-        # The inbox keys act only on the inbox, not under the settings screen; ctrl+c always quits.
-        return action == "quit" or not isinstance(self.screen, Settings)
+        # The inbox keys act only on the inbox, not under a dialog.
+        # Textual's own keys, such as tab between fields, and ctrl+c work everywhere.
+        inbox = {binding.action.partition("(")[0] for binding in self.BINDINGS} - {"quit"}
+        return action not in inbox or not isinstance(self.screen, ModalScreen)
 
     def action_close(self) -> None:
         self.exit()
