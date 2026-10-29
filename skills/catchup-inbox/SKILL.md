@@ -46,7 +46,7 @@ catchup show 12 --json
 An event with `"actor": "user"` is a decision the user made. Respect it:
 
 - `done`: the user handled it. Do not reopen it unless someone else posts something new that needs the user.
-- `snoozed`: the user wants to see it later. Do not change its state. You can still update its content. If the conversation turns urgent before the snooze ends, reopen it and say why in the note.
+- `snoozed`: the user wants to see it later. If someone other than the user posts something new that needs the user, reopen it early with a note that names who posted. Otherwise leave its state and only update its content.
 - `ignored`: the user muted it. See the next rule.
 - `reopened`: the user wants it open. Do not close it unless the conversation clearly ends.
 
@@ -59,7 +59,8 @@ If an item is `ignored`, make no change to it: no `update`, `reopen`, `done` or 
 ## Rules for each conversation
 
 - **No item exists, and the conversation waits on the user**: add a waiting item.
-- **An open or snoozed item exists, and something new happened**: update it (title, body, priority or links) with a note that says what happened.
+- **An open item exists, and something new happened**: update it (title, body, priority or links) with a note that says what happened.
+- **A snoozed item exists, and someone other than the user posts something new that needs the user**: reopen it with a note that names who posted, then update its content. If the new activity needs nothing from the user, leave it snoozed and only update its content.
 - **A done item exists, and someone other than the user posts again with something that needs the user**: reopen it with a note, then update its content. If the new message needs nothing from the user (a thank-you, a reaction), leave the item done.
 - **An open item exists, and it no longer waits on the user** (the user replied, the question was answered elsewhere, the merge request was merged or closed): mark it done with a note that says how it ended.
 - **The item is ignored**: skip it.

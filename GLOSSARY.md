@@ -32,7 +32,7 @@ _Avoid_: Status
 The state of a waiting item that still waits on you.
 
 **Snoozed**:
-The state of a waiting item that is hidden until a date. After that date it counts as open again.
+The state of a waiting item that is hidden until a date. After that date it counts as open again. The agent reopens it early if someone else posts something new in the conversation.
 
 **Done**:
 The state of a waiting item that you or the agent closed. The agent reopens it if someone else posts in the conversation again.
