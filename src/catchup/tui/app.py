@@ -3,7 +3,8 @@
 import sqlite3
 from collections.abc import Callable
 from datetime import datetime
-from typing import ClassVar
+from functools import partial
+from typing import ClassVar, TypeGuard
 
 from textual import events, work
 from textual.actions import SkipAction
@@ -289,15 +290,17 @@ class CatchupApp(App[None]):
     async def action_change(self, action: str) -> None:
         # The keys act only where the details pane shows the matching button.
         if _waiting_open(self.item):
-            await self._change(_CHANGES[action])
+            await self._change(self.item, _CHANGES[action])
 
     def action_snooze(self) -> None:
-        if self.item and _waiting_open(self.item):
-            self.push_screen(SnoozePicker(self.item.title), self._snooze_picked)
+        if _waiting_open(self.item):
+            # Bound to the item now, since a reload while the picker is open can move the selection.
+            picked = partial(self._snooze_picked, self.item)
+            self.push_screen(SnoozePicker(self.item.title), picked)
 
-    async def _snooze_picked(self, until: datetime | None) -> None:
+    async def _snooze_picked(self, item: Item, until: datetime | None) -> None:
         if until is not None:
-            await self._change(lambda store, item_id: _snooze(store, item_id, until))
+            await self._change(item, lambda store, item_id: _snooze(store, item_id, until))
 
     def on_item_list_open_requested(self) -> None:
         self._open_in_claude()
@@ -309,13 +312,10 @@ class CatchupApp(App[None]):
         if event.button.id == "open":
             self._open_in_claude()
         else:
-            await self._change(_CHANGES[str(event.button.id)])
+            await self._change(self.item, _CHANGES[str(event.button.id)])
 
-    async def _change(self, change: Change) -> None:
-        """Apply a state change to the selected item and report it."""
-        if self.item is None:
-            return
-        before = self.item
+    async def _change(self, before: Item, change: Change) -> None:
+        """Apply a state change to an item and report it."""
         try:
             item = await self.store.run(lambda store: change(store, before.id))
         except (CatchupError, sqlite3.Error) as e:
@@ -362,7 +362,7 @@ def _snooze(store: Store, item_id: int, until: datetime) -> Item:
     return store.snooze(item_id, until, actor="user")
 
 
-def _waiting_open(item: Item | None) -> bool:
+def _waiting_open(item: Item | None) -> TypeGuard[Item]:
     return item is not None and item.kind == "waiting" and item.state in ("open", "snoozed")
 
 
