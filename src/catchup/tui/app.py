@@ -63,9 +63,9 @@ class CatchupApp(App[None]):
             yield Details(id="details")
         yield Static(
             Content.from_markup(
-                "[b $background on $dim] ↑↓ [/] select  [b $background on $dim] enter [/] open in"
-                " Claude  [b $background on $dim] click [/] a link to open it"
-                "  [b $background on $dim] ctrl+q [/] quit"
+                "[b $ink on $dim] ↑↓ [/] select  [b $ink on $dim] enter [/] open in"
+                " Claude  [b $ink on $dim] click [/] a link to open it"
+                "  [b $ink on $dim] ctrl+q [/] quit"
             ),
             id="footer",
         )
@@ -122,7 +122,7 @@ class CatchupApp(App[None]):
         tabs = []
         for state in TABS:
             label = f" {state.capitalize()} {snapshot.counts[state]} "
-            style = f"bold {theme.BACKGROUND} on {theme.ACCENT}" if state == self.tab else theme.DIM
+            style = f"bold {theme.INK} on {theme.ACCENT}" if state == self.tab else theme.DIM
             tabs.append(Content.styled(label, style).stylize(Style.from_meta({"tab": state})))
         self.query_one("#tabs", Static).update(Content(" ").join(tabs))
 

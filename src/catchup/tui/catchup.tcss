@@ -124,7 +124,7 @@ Screen {
         }
         &.primary {
             background: $accent;
-            color: $background;
+            color: $ink;
             text-style: bold;
         }
         &.small {
