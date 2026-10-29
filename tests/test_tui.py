@@ -1,3 +1,5 @@
+import asyncio
+from collections.abc import Callable
 from datetime import timedelta
 from pathlib import Path
 from unittest.mock import AsyncMock
@@ -8,7 +10,7 @@ from textual.geometry import Region
 from catchup.config import Config
 from catchup.store import Kind, Priority, Store, utc_now
 from catchup.tui.app import CatchupApp
-from catchup.tui.widgets import ItemList
+from catchup.tui.widgets import Details, ItemList
 
 
 @pytest.fixture
@@ -155,3 +157,28 @@ async def test_poll_shows_new_items_and_keeps_the_selection(db: Path) -> None:
         await app.poll()
         assert ids(app)[1] == urgent
         assert app.query_one(ItemList).selected_id == int(selected)
+
+
+async def test_closing_while_a_store_read_is_in_flight_does_not_fail(
+    db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    add(db, "waiting", "Answer Ken", 2)
+    add(db, "waiting", "Approve the budget", 1)
+
+    app = CatchupApp(Config())
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        details = app.query_one(Details)
+        run = app.store.run
+
+        async def run_until_shutdown(call: Callable[[Store], object]) -> object:
+            result = await run(call)
+            while details.is_attached:
+                await asyncio.sleep(0)
+            return result
+
+        # Textual removes the widgets before it stops the app's timers and workers; holding
+        # each read until then hits that window every time instead of now and then.
+        monkeypatch.setattr(app.store, "run", run_until_shutdown)
+        await pilot.press("down")
+        app.run_worker(app.poll())

@@ -96,6 +96,10 @@ class CatchupApp(App[None]):
         """Read the current tab from the store and redraw, keeping the selected item."""
         tab = self.tab
         snapshot = await self.store.run(lambda store: load(store, tab))
+        # Textual removes the widgets before it stops the app's timers and workers,
+        # so a read that finishes during shutdown has nothing left to show it in.
+        if not self.is_running:
+            return
         now = utc_now()
         self.snapshot = snapshot
         self._poll_key = (snapshot.event_id, now.minute)
@@ -135,6 +139,8 @@ class CatchupApp(App[None]):
         if item is not None:
             item_id = item.id
             history = await self.store.run(lambda store: store.history(item_id))
+            if not self.is_running:  # Shutting down; see reload().
+                return
         self.query_one(Details).show(item, history, utc_now())
 
     def on_option_list_option_highlighted(self, event: OptionList.OptionHighlighted) -> None:
