@@ -23,6 +23,26 @@ Screen {
     height: 3;
 }
 
+#filter-bar {
+    display: none;
+    height: 2;
+    padding: 1 2 0 2;
+    & > #filter-label {
+        width: auto;
+        margin-right: 1;
+        color: $dim;
+    }
+    & > #filter {
+        height: 1;
+        border: none;
+        padding: 0 1;
+        background: $button;
+        &:focus {
+            background: $selected;
+        }
+    }
+}
+
 #panes {
     height: 1fr;
 }

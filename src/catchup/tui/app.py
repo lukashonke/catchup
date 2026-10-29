@@ -6,7 +6,7 @@ from datetime import datetime
 from functools import partial
 from typing import ClassVar, TypeGuard
 
-from textual import events, work
+from textual import events, on, work
 from textual.actions import SkipAction
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -15,7 +15,7 @@ from textual.content import Content
 from textual.screen import ModalScreen
 from textual.style import Style
 from textual.timer import Timer
-from textual.widgets import Button, OptionList, Static
+from textual.widgets import Button, Input, OptionList, Static
 
 from catchup import CatchupError, agent
 from catchup.config import Config
@@ -25,7 +25,7 @@ from catchup.tui import theme
 from catchup.tui.data import TABS, Snapshot, StoreThread, load
 from catchup.tui.dialogs import NoteEditor, SnoozePicker
 from catchup.tui.settings import Settings
-from catchup.tui.widgets import Details, ItemList, day, day_time
+from catchup.tui.widgets import Details, Filter, ItemList, day, day_time, matches
 from catchup.when import parse_every, parse_until
 
 POLL_SECONDS = 2.0
@@ -67,6 +67,8 @@ class CatchupApp(App[None]):
         Binding("u", "undo", "Undo", show=False),
         Binding("z", "snooze", "Snooze", show=False),
         Binding("n", "note", "Note", show=False),
+        Binding("slash", "filter", "Filter", show=False),
+        Binding("escape", "clear_filter", "Clear the filter", show=False),
         Binding("c", "run_agent", "Catch up now", show=False),
         Binding("s", "settings", "Settings", show=False),
         Binding("q", "close", "Quit", show=False),
@@ -96,6 +98,9 @@ class CatchupApp(App[None]):
             yield Static(id="summary")
             yield Static(id="last-run")
         yield Static(id="tabs")
+        with Horizontal(id="filter-bar"):
+            yield Static("Filter", id="filter-label")
+            yield Filter(placeholder="title, body or link label", id="filter")
         with Horizontal(id="panes"):
             yield ItemList(id="list")
             yield Details(id="details")
@@ -130,10 +135,11 @@ class CatchupApp(App[None]):
         )
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
-        # The inbox keys act only on the inbox, not under a dialog.
+        # The inbox keys act only on the inbox: not under a dialog or while typing a filter.
         # Textual's own keys, such as tab between fields, and ctrl+c work everywhere.
         inbox = {binding.action.partition("(")[0] for binding in self.BINDINGS} - {"quit"}
-        return action not in inbox or not isinstance(self.screen, ModalScreen)
+        typing = isinstance(self.focused, Input)
+        return action not in inbox or not (isinstance(self.screen, ModalScreen) or typing)
 
     def action_close(self) -> None:
         self.exit()
@@ -218,8 +224,17 @@ class CatchupApp(App[None]):
         self.snapshot = snapshot
         self._poll_key = (snapshot.event_id, now.minute)
         self._show_header(snapshot)
+        self._show_list()
+
+    def _show_list(self) -> None:
+        """Show the rows of the snapshot that match the filter, keeping the selected item."""
+        if self.snapshot is None:
+            return
+        query = self.query_one(Filter).value.strip()
+        waiting = [item for item in self.snapshot.waiting if matches(item, query)]
+        feed = [item for item in self.snapshot.feed if matches(item, query)]
         selected = self.item.id if self.item else None
-        self.query_one(ItemList).show(tab, snapshot.waiting, snapshot.feed, selected, now)
+        self.query_one(ItemList).show(self.tab, waiting, feed, selected, utc_now(), bool(query))
         self._show_selected()
 
     def _show_header(self, snapshot: Snapshot) -> None:
@@ -313,6 +328,31 @@ class CatchupApp(App[None]):
         index = TABS.index(self.tab) + step
         if 0 <= index < len(TABS):
             await self.show_tab(TABS[index])
+
+    def action_filter(self) -> None:
+        self.query_one("#filter-bar").display = True
+        self.query_one(Filter).focus()
+
+    @on(Input.Changed, "#filter")
+    def _filter_changed(self) -> None:
+        self._show_list()
+
+    @on(Input.Submitted, "#filter")
+    def _filter_submitted(self) -> None:
+        # The bar stays while a filter is set, so the list never looks complete when it is not.
+        self.query_one("#filter-bar").display = bool(self.query_one(Filter).value.strip())
+        self.query_one(ItemList).focus()
+
+    def on_filter_closed(self) -> None:
+        self.action_clear_filter()
+
+    def action_clear_filter(self) -> None:
+        bar = self.query_one("#filter-bar")
+        if not bar.display:
+            raise SkipAction
+        self.query_one(Filter).value = ""
+        bar.display = False
+        self.query_one(ItemList).focus()
 
     def action_open_link(self) -> None:
         if self.item and self.item.links:

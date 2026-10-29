@@ -12,7 +12,7 @@ from textual.containers import Horizontal, VerticalScroll
 from textual.content import Content
 from textual.message import Message
 from textual.style import Style
-from textual.widgets import Button, Label, Markdown, OptionList, Static
+from textual.widgets import Button, Input, Label, Markdown, OptionList, Static
 from textual.widgets.option_list import Option
 
 from catchup.opener import prompt_of
@@ -111,7 +111,13 @@ class ItemList(OptionList):
         """Enter was pressed on the selected item."""
 
     def show(
-        self, tab: State, waiting: list[Item], feed: list[Item], selected: int | None, now: datetime
+        self,
+        tab: State,
+        waiting: list[Item],
+        feed: list[Item],
+        selected: int | None,
+        now: datetime,
+        filtered: bool = False,
     ) -> None:
         """Replace the rows and select `selected`, the row in its place if it is gone, else the first."""
         previous = self.highlighted
@@ -120,7 +126,8 @@ class ItemList(OptionList):
             options.append(Option(_section("WAITING ON YOU", str(len(waiting))), disabled=True))
         options += [Option(_row(item, now), id=str(item.id)) for item in waiting]
         if not waiting:
-            options.append(Option(Text(_EMPTY[tab], style=theme.FAINT), disabled=True))
+            empty = "Nothing matches the filter." if filtered else _EMPTY[tab]
+            options.append(Option(Text(empty, style=theme.FAINT), disabled=True))
         if feed:
             options.append(Option(Text(""), disabled=True))
             options.append(Option(_section("FYI", "newest first"), disabled=True))
@@ -148,6 +155,24 @@ class ItemList(OptionList):
     def action_open(self) -> None:
         if self.selected_id is not None:
             self.post_message(self.OpenRequested())
+
+
+class Filter(Input):
+    """The filter bar over the list; Esc clears and closes it."""
+
+    BINDINGS: ClassVar = [Binding("escape", "close", "Clear the filter", show=False)]
+
+    class Closed(Message):
+        """Esc was pressed in the filter bar."""
+
+    def action_close(self) -> None:
+        self.post_message(self.Closed())
+
+
+def matches(item: Item, query: str) -> bool:
+    """Return whether the title, the body or a link label contains `query`, ignoring case."""
+    text = " ".join([item.title, item.body or "", *(link.label for link in item.links)])
+    return query.casefold() in text.casefold()
 
 
 class Details(VerticalScroll):

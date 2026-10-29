@@ -426,3 +426,34 @@ async def test_tab_moves_between_settings_fields(db: Path) -> None:
         first = app.focused
         await pilot.press("tab")
         assert app.focused is not first and isinstance(app.focused, Input)
+
+
+async def test_slash_filters_the_rows_by_title_body_and_link_label(db: Path) -> None:
+    by_title = add(db, "waiting", "Approve the budget", 3)
+    add(db, "waiting", "Answer Ken", 2)
+    by_body = add(db, "waiting", "Reply to Dana", 1, body="She asks about the Budget review.")
+    with Store(db) as store:
+        by_link = str(
+            store.add("fyi", "Forecast out", links=[Link("Q4 budget", "https://x.test")]).id
+        )
+
+    app = CatchupApp(Config())
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        await pilot.press("slash", *"budget q ")
+        assert ids(app) == [None, None]
+        assert "Nothing matches the filter." in text(app, "#list")
+        await pilot.press("backspace", "backspace", "backspace")
+        assert ids(app) == [None, by_title, by_body, None, None, by_link]
+        assert text(app, "#list").splitlines()[0].split()[-1] == "2"
+
+        await pilot.press("enter", "space")
+        await app.workers.wait_for_complete()
+        assert isinstance(app.focused, ItemList) and app.query_one("#filter-bar").display
+        assert ids(app) == [None, by_body, None, None, by_link]
+
+        await pilot.press("escape")
+        assert not app.query_one("#filter-bar").display and len(ids(app)) == 6
+        await pilot.press("slash", "k", "escape")
+        assert not app.query_one("#filter-bar").display and isinstance(app.focused, ItemList)
+        assert len(ids(app)) == 6
