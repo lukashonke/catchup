@@ -81,7 +81,17 @@ catchup snooze ID --until 1d|3d|1w|mon|YYYY-MM-DD [--note TEXT]
 open_command = ["/path/to/my-opener.sh"]
 # The name of that action on the button, in the footer and in notifications.
 open_label = "Open in Codex"
+# The agent run; it is off without a prompt. The command gets the prompt on stdin.
+agent_prompt = "Use the catchup-inbox skill to sync my inbox with Slack and email."
+agent_command = ["claude", "-p", "--permission-mode", "auto"]
+agent_every = "1h"
 ```
+
+The settings screen in the TUI edits the same file. It writes only keys that differ from the default and keeps comments and unknown keys.
+
+### Agent runs
+
+The TUI starts the agent run, so a user needs no separate scheduler. A run is a background process in its own session, so it outlives the TUI. `agent.json` next to the database holds the process id and start time of the last run, and `agent.lock` serializes reading and writing it, so of several open TUIs only one starts each run. A run is due when the interval has passed since the last start and the last process is gone.
 
 If `open_command` is not set and the TUI runs inside herdr (`HERDR_ENV=1`), catchup uses its bundled herdr opener. That opener creates a herdr tab in the current workspace, labeled with the item title, in the home directory, and starts Claude in it with the prompt. Outside herdr with no config, the button tells you how to set `open_command`.
 
@@ -91,7 +101,7 @@ If an item has no prompt, catchup sends a default one: the title, the body, the 
 
 The TUI is a two-pane view:
 
-- **Header**: the name, the number of open waiting items and urgent items, and the time of the agent's last event.
+- **Header**: the name, the number of open waiting items and urgent items, and the time of the agent's last event. With an agent run configured, it also shows when the run started while it runs, and else when the next run is due.
 - **State tabs**: Open, Snoozed, Done, Ignored, each with a count.
 - **List**, on the left. On the Open tab it shows a "Waiting on you" section first, sorted by priority and then oldest first. Below it is the FYI feed, newest first, in dimmer text. Each row shows a priority marker (`!` urgent, `↓` low), the title, the type of the main link, and the age. The age turns yellow after 3 days and red after 7.
 - **Details**, on the right: the title, the state, when it was first seen, the body, the links as clickable chips with their type, the buttons, the prompt that "Open in Claude" will send, and the history.
@@ -103,4 +113,5 @@ In a narrow terminal the details pane moves below the list. The mouse and the up
 - Enter: Open in Claude.
 - Ctrl+Enter: open the first link in the browser. The terminal must send Ctrl+Enter as its own key (the kitty keyboard protocol); otherwise it arrives as Enter.
 - Space: Done. Backspace: Ignore. Both act only on open and snoozed waiting items.
+- r: start the agent run now. s: the settings screen.
 - q: quit.

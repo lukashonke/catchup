@@ -22,7 +22,7 @@ uv tool install git+https://github.com/lukashonke/catchup
    catchup
    ```
 
-   Up and down select an item, left and right switch the state tab. Enter opens the item in Claude, Ctrl+Enter opens its first link, Space marks it done, Backspace ignores it, and q quits.
+   Up and down select an item, left and right switch the state tab. Enter opens the item in Claude, Ctrl+Enter opens its first link, Space marks it done, Backspace ignores it, s opens the settings, and q quits.
 
 2. In another terminal, add an item by hand. The UI shows it at once.
 
@@ -31,7 +31,7 @@ uv tool install git+https://github.com/lukashonke/catchup
      --link "MR !42=https://git.example.com/acme/billing/-/merge_requests/42"
    ```
 
-3. Connect your agent. Install the agent guide (see below), then run your agent on a schedule and tell it to keep the catchup inbox in sync with your sources.
+3. Connect your agent. Install the agent guide (see below), then let the UI run your agent on a schedule (see [Agent runs](#agent-runs)), or use any other scheduler. Tell the agent to keep the catchup inbox in sync with your sources.
 
 ## How an agent uses catchup
 
@@ -102,6 +102,25 @@ exec tmux new-window -n "$name" -c "$HOME" claude -- "$CATCHUP_PROMPT"
 ```
 
 When `new-window` gets the command as more than one argument, tmux runs it directly, without a shell, so the prompt reaches Claude Code as one argument with nothing expanded. Do not pass the command as one string: tmux then runs it with `sh -c` on the tmux server. The `--` stops Claude Code from reading a prompt that starts with `-` as an option. The new window gets the tmux server's environment, so `claude` must be on the `PATH` that the tmux server started with.
+
+## Agent runs
+
+While the UI is open, it can start your agent on a schedule. Press `s` for the settings, or set it in `~/.config/catchup/config.toml`:
+
+```toml
+agent_prompt = """
+Use the catchup-inbox skill to sync my inbox with Slack and email.
+"""
+agent_command = ["claude", "-p", "--permission-mode", "auto"]  # the default
+agent_every = "1h"  # the default; 30m, 1h, 4h, ...
+```
+
+- With no `agent_prompt`, the UI starts nothing.
+- The command runs in your home directory, in the background, with the prompt on stdin. It keeps running when you close the UI.
+- When the interval has passed since the last start, the UI starts the next run. Press `r` to start one now. If several UIs are open, only one of them starts each run.
+- The header shows when the agent runs and when the next run is due. The output of the last run is in `agent.log` next to the database.
+
+The agent reads messages that other people wrote, so a message can try to talk it into doing something else. The default command uses Claude Code's auto mode, which checks each action before it runs. Do not use `--dangerously-skip-permissions` here.
 
 ## Where the data lives
 

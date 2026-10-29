@@ -6,10 +6,12 @@ from unittest.mock import AsyncMock
 
 import pytest
 from textual.geometry import Region
+from textual.widgets import Input
 
-from catchup.config import Config
+from catchup.config import Config, load_config
 from catchup.store import Kind, Link, Priority, Store, utc_now
 from catchup.tui.app import CatchupApp
+from catchup.tui.settings import Settings
 from catchup.tui.widgets import Details, ItemList
 
 
@@ -221,3 +223,46 @@ async def test_ctrl_enter_opens_the_first_link(db: Path, monkeypatch: pytest.Mon
         await pilot.press("ctrl+enter")
         assert opened == ["https://example.com/mr/412"]
         assert "Open in Codex" in text(app, "#open")
+
+
+async def test_settings_save_to_the_config_and_take_effect(
+    db: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    add(db, "waiting", "Answer Ken", 1)
+
+    app = CatchupApp(Config())
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        await pilot.press("s")
+        await pilot.pause()
+        app.screen.query_one("#open_label", Input).value = "Open in Codex"
+        app.screen.query_one("#agent_every", Input).value = "2h"
+        await pilot.press("ctrl+s")
+        await pilot.pause()
+        assert "Open in Codex" in text(app, "#open")
+        assert "enter  Open in Codex" in text(app, "#footer")
+
+    saved = load_config()
+    assert (saved.open_label, saved.agent_every, saved.agent_prompt) == (
+        "Open in Codex",
+        "2h",
+        None,
+    )
+
+
+async def test_settings_refuse_a_bad_interval(
+    db: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+
+    app = CatchupApp(Config())
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        await pilot.press("s")
+        await pilot.pause()
+        app.screen.query_one("#agent_every", Input).value = "daily"
+        await pilot.press("ctrl+s")
+        await pilot.pause()
+        assert isinstance(app.screen, Settings)
+    assert not (tmp_path / "config").exists()

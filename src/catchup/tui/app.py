@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import ClassVar
 
 from textual import events, work
+from textual.actions import SkipAction
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
@@ -12,16 +13,18 @@ from textual.content import Content
 from textual.style import Style
 from textual.widgets import Button, OptionList, Static
 
-from catchup import CatchupError
+from catchup import CatchupError, agent
 from catchup.config import Config
 from catchup.opener import open_item
 from catchup.store import Item, State, Store, utc_now
 from catchup.tui import theme
 from catchup.tui.data import TABS, Snapshot, StoreThread, load
+from catchup.tui.settings import Settings
 from catchup.tui.widgets import Details, ItemList, day, day_time
-from catchup.when import parse_until
+from catchup.when import parse_every, parse_until
 
 POLL_SECONDS = 2.0
+AGENT_CHECK_SECONDS = 30.0
 NARROW_COLUMNS = 110
 TINY_COLUMNS = 62
 _CHANGED = {"done": "Done", "ignored": "Ignored", "open": "Reopened"}
@@ -44,7 +47,9 @@ class CatchupApp(App[None]):
         Binding("space", "change('done')", "Done", show=False),
         Binding("backspace", "change('ignore')", "Ignore", show=False),
         Binding("ctrl+enter", "open_link", "Open the first link", show=False),
-        Binding("q", "quit", "Quit", show=False),
+        Binding("r", "run_agent", "Run the agent", show=False),
+        Binding("s", "settings", "Settings", show=False),
+        Binding("q", "close", "Quit", show=False),
         Binding("ctrl+c", "quit", "Quit", show=False, priority=True),
     ]
 
@@ -60,6 +65,7 @@ class CatchupApp(App[None]):
         # Ages and expired snoozes change with time alone, so the minute is part of the poll key.
         self._poll_key: tuple[int, int] | None = None
         self._poll_error: str | None = None
+        self.agent_state = agent.RunState(started_at=None, running=False)
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="bar"):
@@ -69,28 +75,93 @@ class CatchupApp(App[None]):
         with Horizontal(id="panes"):
             yield ItemList(id="list")
             yield Details(id="details")
-        keys = [
-            ("↑↓", "select"),
-            ("←→", "tab"),
-            ("enter", self.config.open_label),
-            ("ctrl+enter", "first link"),
-            ("space", "done"),
-            ("⌫", "ignore"),
-            ("q", "quit"),
-        ]
-        yield Static(
-            Content("  ").join(
-                Content.assemble((f" {key} ", f"bold {theme.INK} on {theme.DIM}"), f" {what}")
-                for key, what in keys
-            ),
-            id="footer",
-        )
+        yield Static(id="footer")
 
     async def on_mount(self) -> None:
-        self.query_one("#open", Button).label = self.config.open_label
+        self._show_config()
         self.query_one(ItemList).focus()
         await self.reload()
         self.set_interval(POLL_SECONDS, self.poll)
+        self.set_interval(AGENT_CHECK_SECONDS, self.check_agent)
+        await self.check_agent()
+
+    def _show_config(self) -> None:
+        """Show the parts of the screen that the settings change."""
+        self.query_one("#open", Button).label = self.config.open_label
+        keys = [
+            ("←→", "tab"),
+            ("enter", self.config.open_label),
+            ("ctrl+enter", "link"),
+            ("space", "done"),
+            ("⌫", "ignore"),
+            *([("r", "run agent now")] if self.config.agent_prompt else []),
+            ("s", "settings"),
+            ("q", "quit"),
+        ]
+        self.query_one("#footer", Static).update(
+            Content("  ").join(
+                Content.assemble((f" {key} ", f"bold {theme.INK} on {theme.DIM}"), f" {what}")
+                for key, what in keys
+            )
+        )
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        # The inbox keys act only on the inbox, not under the settings screen; ctrl+c always quits.
+        return action == "quit" or not isinstance(self.screen, Settings)
+
+    def action_close(self) -> None:
+        self.exit()
+
+    async def check_agent(self) -> None:
+        """Start the agent run when it is due, and show whether it runs."""
+        try:
+            if agent.is_due(self.config, utc_now()):
+                self._run_agent()
+            self.agent_state = agent.read_state()
+        except (CatchupError, OSError) as e:
+            self.notify(str(e), title="Agent run failed", severity="error", markup=False)
+        if self.snapshot:
+            self._show_header(self.snapshot)
+
+    def action_run_agent(self) -> None:
+        if not self.config.agent_prompt:
+            raise SkipAction
+        self._run_agent()
+
+    @work(group="agent", exclusive=True)
+    async def _run_agent(self) -> None:
+        try:
+            process = await agent.start(self.config, utc_now())
+        except (CatchupError, OSError) as e:
+            self.notify(str(e), title="Agent run failed", severity="error", markup=False)
+            return
+        if process is None:
+            self.notify("The agent is already running.", markup=False)
+            return
+        self.notify("Running in the background.", title="Agent started", markup=False)
+        await self.check_agent()
+        code = await process.wait()
+        if code != 0 and self.is_running:
+            self.notify(
+                f"It exited with code {code}. The output is in {agent.log_path()}.",
+                title="Agent run failed",
+                severity="error",
+                timeout=20,
+                markup=False,
+            )
+        if self.is_running:
+            await self.check_agent()
+
+    def action_settings(self) -> None:
+        self.push_screen(Settings(self.config), self._settings_saved)
+
+    async def _settings_saved(self, config: Config | None) -> None:
+        if config is None:
+            return
+        self.config = config
+        self._show_config()
+        self.notify("Settings saved.", markup=False)
+        await self.check_agent()
 
     def on_unmount(self) -> None:
         self.store.close()
@@ -134,7 +205,16 @@ class CatchupApp(App[None]):
         )
         self.query_one("#summary", Static).update(summary)
         last = snapshot.last_agent_at
-        last_run = f"last agent run {_time_and_day(last)}" if last else "the agent has not run yet"
+        state = self.agent_state
+        if state.running and state.started_at:
+            last_run = f"agent running since {state.started_at.astimezone():%H:%M}"
+        elif last:
+            last_run = f"last agent run {_time_and_day(last)}"
+        else:
+            last_run = "the agent has not run yet"
+        if self.config.agent_prompt and not state.running:
+            due = (state.started_at or utc_now()) + parse_every(self.config.agent_every)
+            last_run += f" · next {max(due, utc_now()).astimezone():%H:%M}"
         self.query_one("#last-run", Static).update(last_run)
         tabs = []
         for state in TABS:

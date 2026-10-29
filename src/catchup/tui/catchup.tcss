@@ -196,3 +196,69 @@ Toast {
 Screen.-tiny #d-actions {
     layout: vertical;
 }
+
+Settings {
+    align: center middle;
+    background: $chrome 60%;
+}
+
+#settings {
+    width: 90;
+    max-width: 100%;
+    height: auto;
+    max-height: 100%;
+    padding: 1 2;
+    background: $panel;
+    border: solid $line;
+    scrollbar-size-vertical: 1;
+    scrollbar-background: $panel;
+    scrollbar-color: $line;
+    & > #s-title {
+        color: $bright;
+        text-style: bold;
+    }
+    & > #s-path, & > .s-hint, & > #s-keys {
+        color: $dim;
+    }
+    & > .s-label {
+        color: $faint;
+        text-style: bold;
+        margin-top: 1;
+    }
+    & > Input {
+        border: none;
+        height: 1;
+        padding: 0 1;
+        background: $button;
+        &:focus {
+            background: $selected;
+        }
+    }
+    & > TextArea {
+        border: none;
+        height: 6;
+        padding: 0 1;
+        background: $button;
+        &:focus {
+            background: $selected;
+        }
+    }
+    & > #s-actions {
+        height: auto;
+        margin-top: 1;
+        & Button {
+            margin-right: 1;
+            min-width: 0;
+            width: auto;
+            padding: 0;
+            background: $button;
+            color: $foreground;
+            text-style: none;
+            &.primary {
+                background: $accent;
+                color: $ink;
+                text-style: bold;
+            }
+        }
+    }
+}
