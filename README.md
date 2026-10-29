@@ -33,10 +33,10 @@ uv tool install git+https://github.com/lukashonke/catchup
 
 ## How an agent uses catchup
 
-The agent guide at [`skills/catchup/SKILL.md`](skills/catchup/SKILL.md) tells an agent how to keep the inbox in sync: read the current state first, respect your decisions, when to add, update, reopen or close an item, and how to fill each field. It is an agent skill. To install it for Claude Code, copy the folder into your skills directory:
+The agent guide at [`skills/catchup-inbox/SKILL.md`](skills/catchup-inbox/SKILL.md) tells an agent how to keep the inbox in sync: read the current state first, respect your decisions, when to add, update, reopen or close an item, and how to fill each field. It is an agent skill. To install it for Claude Code, copy the folder into your skills directory:
 
 ```sh
-cp -r skills/catchup ~/.claude/skills/
+cp -r skills/catchup-inbox ~/.claude/skills/
 ```
 
 Other agents can read the same file as instructions.

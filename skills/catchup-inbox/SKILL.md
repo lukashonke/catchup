@@ -1,5 +1,5 @@
 ---
-name: catchup
+name: catchup-inbox
 description: Keep a catchup inbox in sync with the user's sources through the `catchup` CLI. Use when you maintain a catchup inbox, for example in a scheduled run that reads chat, email or code review and records what waits on the user.
 ---
 
