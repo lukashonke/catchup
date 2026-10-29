@@ -1,5 +1,6 @@
 import asyncio
-from collections.abc import Callable
+import subprocess
+from collections.abc import Callable, Sequence
 from datetime import timedelta
 from pathlib import Path
 from unittest.mock import AsyncMock
@@ -19,8 +20,9 @@ from catchup.when import parse_until
 
 @pytest.fixture(autouse=True)
 def no_agent_runs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> AsyncMock:
-    """Keep every test from starting a real agent run, even with an agent prompt set."""
+    """Keep every test from starting a real agent run or renaming the herdr tab it runs in."""
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    monkeypatch.delenv("HERDR_ENV", raising=False)
     monkeypatch.setattr("catchup.agent.is_due", lambda config, now: False)
     start = AsyncMock(return_value=None)
     monkeypatch.setattr("catchup.agent.start", start)
@@ -489,3 +491,53 @@ async def test_narrow_footer_drops_whole_hints_and_keeps_the_help(db: Path) -> N
         await pilot.pause()
         assert text(app, "#footer-keys").endswith("/  filter")
         assert text(app, "#footer-help") == "?  keys"
+
+
+async def test_counts_show_on_the_herdr_tab_until_exit(
+    db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    add(db, "waiting", "Answer Ken", 1)
+    monkeypatch.setenv("HERDR_ENV", "1")
+    monkeypatch.setenv("HERDR_TAB_ID", "w1:t2")
+    labels: list[str] = []
+
+    async def herdr(argv: Sequence[str], env: object) -> subprocess.CompletedProcess[str]:
+        if list(argv[1:3]) == ["tab", "rename"]:
+            labels.append(argv[4])
+        return subprocess.CompletedProcess(argv, 0, '{"result": {"tab": {"label": "inbox"}}}', "")
+
+    monkeypatch.setattr("catchup.herdr.run_command", herdr)
+    app = CatchupApp(Config())
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        assert labels == ["catchup 1 · 1 new"]
+        await pilot.press("space")
+        await app.workers.wait_for_complete()
+        assert labels[-1] == "catchup 0"
+    assert labels[-1] == "inbox"
+
+
+async def test_a_failing_herdr_is_reported_once_and_left_alone(
+    db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    add(db, "waiting", "Answer Ken", 1)
+    monkeypatch.setenv("HERDR_ENV", "1")
+    monkeypatch.setenv("HERDR_TAB_ID", "w1:t2")
+    calls: list[Sequence[str]] = []
+
+    async def herdr(argv: Sequence[str], env: object) -> subprocess.CompletedProcess[str]:
+        calls.append(argv)
+        return subprocess.CompletedProcess(argv, 1, "", "no such tab")
+
+    monkeypatch.setattr("catchup.herdr.run_command", herdr)
+    app = CatchupApp(Config())
+    notices: list[str | None] = []
+    monkeypatch.setattr(app, "notify", lambda message, title=None, **_: notices.append(title))
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        await pilot.press("space")
+        await app.workers.wait_for_complete()
+    assert len(calls) == 1
+    assert notices.count("Cannot show the counts on the herdr tab") == 1

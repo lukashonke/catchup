@@ -24,7 +24,7 @@ uv tool install git+https://github.com/lukashonke/catchup
 
    Up and down select an item, left and right switch the state tab. Enter opens the item in Claude, Ctrl+Enter opens its first link, Space marks it done, Backspace ignores it, z snoozes it, u undoes the last change, n adds a note for the agent, / filters the list, s opens the settings, and q quits. Press ? for every key.
 
-   A dot marks the items the agent added or changed since you last looked at them.
+   A dot marks the items the agent added or changed since you last looked at them. Inside [herdr](https://herdr.dev), the tab label shows the counts too, such as `catchup 12 · 3 new`.
 
 2. In another terminal, add an item by hand. The UI shows it at once.
 

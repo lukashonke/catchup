@@ -1,6 +1,7 @@
-"""The bundled opener for herdr: a new tab in the current workspace with Claude in it."""
+"""herdr support: the bundled opener, and the inbox counts in the label of the TUI's tab."""
 
 import json
+import re
 import secrets
 from collections.abc import Mapping
 from pathlib import Path
@@ -10,6 +11,8 @@ from catchup import CatchupError
 from catchup.opener import run_command
 
 _LABEL_LENGTH = 32
+# The labels TabTitle sets, so a label left behind by a crashed TUI is not restored as the original.
+_COUNTS_LABEL = re.compile(r"catchup \d+( · \d+ new)?")
 
 
 async def open_in_herdr(item_id: int, title: str, prompt: str, environ: Mapping[str, str]) -> None:
@@ -36,6 +39,35 @@ async def open_in_herdr(item_id: int, title: str, prompt: str, environ: Mapping[
     # herdr reads a leading "-" as an option even after "--"; a space keeps it text.
     text = " " + prompt if prompt.startswith("-") else prompt
     await _call(environ, herdr, "agent", "prompt", name, text)
+
+
+class TabTitle:
+    """Show a text, such as the inbox counts, as the label of the herdr tab the TUI runs in."""
+
+    def __init__(self, environ: Mapping[str, str]) -> None:
+        self.environ = environ
+        self.tab = environ.get("HERDR_TAB_ID") if environ.get("HERDR_ENV") == "1" else None
+        self.original: str | None = None
+        self.shown: str | None = None
+
+    async def show(self, text: str) -> None:
+        """Set the tab label to `text` unless it shows that already; raise CatchupError on failure."""
+        if self.tab is None or text == self.shown:
+            return
+        herdr = self.environ.get("HERDR_BIN_PATH") or "herdr"
+        if self.original is None:
+            label = (await _call(self.environ, herdr, "tab", "get", self.tab))["tab"]["label"]
+            self.original = "catchup" if _COUNTS_LABEL.fullmatch(label) else label
+        await _call(self.environ, herdr, "tab", "rename", self.tab, text)
+        self.shown = text
+
+    async def restore(self) -> None:
+        """Give the tab back the label it had before; raise CatchupError on failure."""
+        if self.tab is None or self.original is None or self.shown is None:
+            return
+        herdr = self.environ.get("HERDR_BIN_PATH") or "herdr"
+        await _call(self.environ, herdr, "tab", "rename", self.tab, self.original)
+        self.shown = None
 
 
 def _label(title: str) -> str:

@@ -1,5 +1,7 @@
 """The Textual app: header, state tabs, the item list and the details pane."""
 
+import asyncio
+import os
 import sqlite3
 from collections.abc import Callable
 from datetime import datetime
@@ -19,6 +21,7 @@ from textual.widgets import Button, Input, OptionList, Static
 
 from catchup import CatchupError, agent
 from catchup.config import Config
+from catchup.herdr import TabTitle
 from catchup.opener import open_item
 from catchup.store import Item, State, Store, utc_now
 from catchup.tui import theme
@@ -38,6 +41,7 @@ from catchup.when import parse_every, parse_until
 
 POLL_SECONDS = 2.0
 SEEN_SECONDS = 1.0
+TAB_RESTORE_SECONDS = 2.0
 AGENT_CHECK_SECONDS = 30.0
 NARROW_COLUMNS = 110
 TINY_COLUMNS = 62
@@ -101,6 +105,7 @@ class CatchupApp(App[None]):
         self._undo: list[Item] = []
         # The new item that counts as seen when its timer fires, unless the selection moves first.
         self._seen: tuple[int, Timer] | None = None
+        self.tab_title = TabTitle(os.environ)
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="bar"):
@@ -204,8 +209,12 @@ class CatchupApp(App[None]):
         self.notify("Settings saved.", markup=False)
         await self.check_agent()
 
-    def on_unmount(self) -> None:
+    async def on_unmount(self) -> None:
         self.store.close()
+        try:
+            await asyncio.wait_for(self.tab_title.restore(), TAB_RESTORE_SECONDS)
+        except (CatchupError, TimeoutError):
+            pass  # The tab keeps the counts; the next start reads them as its own label.
 
     async def poll(self) -> None:
         """Reload when the database changed or a minute passed."""
@@ -255,6 +264,8 @@ class CatchupApp(App[None]):
             (f" · {snapshot.new} new", theme.ACCENT if snapshot.new else theme.DIM),
         )
         self.query_one("#summary", Static).update(summary)
+        new = f" · {snapshot.new} new" if snapshot.new else ""
+        self._show_tab_title(f"catchup {snapshot.counts['open']}{new}")
         last = snapshot.last_agent_at
         state = self.agent_state
         if state.running and state.started_at:
@@ -273,6 +284,16 @@ class CatchupApp(App[None]):
             style = f"bold {theme.INK} on {theme.ACCENT}" if state == self.tab else theme.DIM
             tabs.append(Content.styled(label, style).stylize(Style.from_meta({"tab": state})))
         self.query_one("#tabs", Static).update(Content(" ").join(tabs))
+
+    @work(group="herdr", exclusive=True)
+    async def _show_tab_title(self, text: str) -> None:
+        """Show the counts on the herdr tab, so they are visible from the other tabs."""
+        try:
+            await self.tab_title.show(text)
+        except CatchupError as e:
+            # Report it once and stop trying; the inbox works the same without it.
+            self.tab_title.tab = None
+            self.notify(str(e), title="Cannot show the counts on the herdr tab", markup=False)
 
     def _show_selected(self) -> None:
         """Show the item that the list highlights in the details pane."""

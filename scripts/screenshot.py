@@ -146,6 +146,8 @@ async def main() -> None:
         path = Path(directory) / "catchup.db"
         selected = seed(path)
         os.environ["CATCHUP_DB"] = str(path)
+        # Inside herdr the app would rename the tab this script runs in.
+        os.environ.pop("HERDR_ENV", None)
         from catchup.tui.app import CatchupApp
         from catchup.tui.widgets import ItemList
 

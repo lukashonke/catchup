@@ -117,6 +117,8 @@ The TUI is a two-pane view:
 
 In a narrow terminal the details pane moves below the list, and the footer drops the hints that do not fit.
 
+Inside herdr (`HERDR_ENV=1` and `HERDR_TAB_ID` set), the TUI also shows the counts as the label of its own tab, such as `catchup 12 · 3 new`, so you see them from the other tabs. It renames the tab with `herdr tab rename` in the background, only when the text changes, and gives the tab its old label back when it quits. herdr's pane title (`pane report-metadata --title`) is not drawn on the tab bar, so the tab label is the only place the counts show. If herdr fails, the TUI says so once and leaves the tab alone. A label left behind by a TUI that crashed is replaced with `catchup` on the next exit.
+
 An item is new when the agent created, reopened or updated it after you last saw it. An item counts as seen when it stays selected for a second, so moving the selection past a row does not count. Seeing an item is not an event and does not change `updated_at`, so it never makes the item look changed to the agent.
 
 When "Open in Claude" succeeds, the TUI records an `opened` event by you. The details pane shows how long ago you last opened the item, and its row shows an arrow while it is not new.

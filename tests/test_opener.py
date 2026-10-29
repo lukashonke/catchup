@@ -1,3 +1,4 @@
+import json
 import subprocess
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -6,6 +7,7 @@ import pytest
 
 from catchup import CatchupError
 from catchup.config import Config
+from catchup.herdr import TabTitle
 from catchup.links import Link
 from catchup.opener import default_prompt, open_item, run_command
 from catchup.store import Item, Store
@@ -116,3 +118,49 @@ async def test_without_config_or_herdr_it_explains_open_command(
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
     with pytest.raises(CatchupError, match=f"Set open_command in {tmp_path}/catchup/config.toml"):
         await open_item(item, Config(), {})
+
+
+HERDR = {"HERDR_ENV": "1", "HERDR_TAB_ID": "w1:t2", "HERDR_BIN_PATH": "/opt/herdr"}
+OK = (0, '{"result": {}}', "")
+
+
+def tab_info(label: str) -> tuple[int, str, str]:
+    return (0, json.dumps({"result": {"tab": {"label": label}}}), "")
+
+
+async def test_tab_title_renames_the_tab_once_per_text_and_restores_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = FakeRun(tab_info("inbox"), OK, OK, OK)
+    monkeypatch.setattr("catchup.herdr.run_command", fake)
+    title = TabTitle(HERDR)
+    await title.show("catchup 3 · 1 new")
+    await title.show("catchup 3 · 1 new")
+    await title.show("catchup 3")
+    await title.restore()
+    assert [argv[1:] for argv, _ in fake.calls] == [
+        ["tab", "get", "w1:t2"],
+        ["tab", "rename", "w1:t2", "catchup 3 · 1 new"],
+        ["tab", "rename", "w1:t2", "catchup 3"],
+        ["tab", "rename", "w1:t2", "inbox"],
+    ]
+
+
+async def test_tab_title_restores_catchup_after_a_label_left_by_a_crash(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = FakeRun(tab_info("catchup 12 · 3 new"), OK, OK)
+    monkeypatch.setattr("catchup.herdr.run_command", fake)
+    title = TabTitle(HERDR)
+    await title.show("catchup 4")
+    await title.restore()
+    assert fake.calls[-1][0][1:] == ["tab", "rename", "w1:t2", "catchup"]
+
+
+async def test_tab_title_does_nothing_outside_herdr(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = FakeRun()
+    monkeypatch.setattr("catchup.herdr.run_command", fake)
+    title = TabTitle({"HERDR_TAB_ID": "w1:t2"})
+    await title.show("catchup 3")
+    await title.restore()
+    assert fake.calls == []
