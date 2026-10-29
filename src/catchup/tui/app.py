@@ -47,6 +47,7 @@ class CatchupApp(App[None]):
         Binding("space", "change('done')", "Done", show=False),
         Binding("backspace", "change('ignore')", "Ignore", show=False),
         Binding("ctrl+enter", "open_link", "Open the first link", show=False),
+        Binding("u", "undo", "Undo", show=False),
         Binding("c", "run_agent", "Catch up now", show=False),
         Binding("s", "settings", "Settings", show=False),
         Binding("q", "close", "Quit", show=False),
@@ -66,6 +67,8 @@ class CatchupApp(App[None]):
         self._poll_key: tuple[int, int] | None = None
         self._poll_error: str | None = None
         self.agent_state = agent.RunState(started_at=None, running=False)
+        # The items as they were before each state change made in this session, latest last.
+        self._undo: list[Item] = []
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="bar"):
@@ -291,7 +294,8 @@ class CatchupApp(App[None]):
         """Apply a button's state change to the selected item and report it."""
         if self.item is None:
             return
-        item_id = self.item.id
+        before = self.item
+        item_id = before.id
         actions = {
             "done": lambda store: store.done(item_id, actor="user"),
             "ignore": lambda store: store.ignore(item_id, actor="user"),
@@ -305,6 +309,7 @@ class CatchupApp(App[None]):
         except (CatchupError, sqlite3.Error) as e:
             self.notify(str(e), title="Not changed", severity="error", markup=False)
             return
+        self._undo.append(before)
         await self.reload()
         if item.snoozed_until:
             self.notify(
@@ -312,6 +317,20 @@ class CatchupApp(App[None]):
             )
         else:
             self.notify(item.title, title=_CHANGED[str(item.state)], markup=False)
+
+    async def action_undo(self) -> None:
+        if not self._undo:
+            self.notify("Nothing to undo.", markup=False)
+            return
+        before = self._undo[-1]
+        try:
+            self.item = await self.store.run(lambda store: _restore(store, before))
+        except (CatchupError, sqlite3.Error) as e:
+            self.notify(str(e), title="Not undone", severity="error", markup=False)
+            return
+        self._undo.pop()
+        await self.reload()
+        self.notify(before.title, title="Undone", markup=False)
 
     @work(group="open")
     async def _open_in_claude(self) -> None:
@@ -329,6 +348,14 @@ class CatchupApp(App[None]):
 
 def _snooze(store: Store, item_id: int, until: str) -> Item:
     return store.snooze(item_id, parse_until(until, utc_now()), actor="user")
+
+
+def _restore(store: Store, item: Item) -> Item:
+    """Put a waiting item back into the state it had in `item`, as the user's change."""
+    if item.snoozed_until and item.snoozed_until > utc_now():
+        return store.snooze(item.id, item.snoozed_until, note="undo", actor="user")
+    change = {"done": store.done, "ignored": store.ignore}.get(str(item.state), store.reopen)
+    return change(item.id, note="undo", actor="user")
 
 
 def _time_and_day(moment: datetime) -> str:

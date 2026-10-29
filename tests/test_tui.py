@@ -283,3 +283,38 @@ async def test_c_starts_the_agent_run(db: Path, monkeypatch: pytest.MonkeyPatch)
         await app.workers.wait_for_complete()
         assert start.await_count == 1
         assert "c  catch up now" in text(app, "#footer")
+
+
+async def test_u_undoes_the_latest_state_change(db: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    first = add(db, "waiting", "Answer Ken", 2)
+    second = add(db, "waiting", "Approve the budget", 1)
+    until = utc_now() + timedelta(days=2)
+    with Store(db) as store:
+        store.snooze(int(second), until)
+
+    app = CatchupApp(Config())
+    async with app.run_test(size=(140, 40)) as pilot:
+        notices: list[str | None] = []
+        monkeypatch.setattr(app, "notify", lambda message, title=None, **_: notices.append(title))
+        await pilot.pause()
+        await pilot.press("space")
+        await app.workers.wait_for_complete()
+        await app.show_tab("snoozed")
+        await pilot.press("backspace")
+        await app.workers.wait_for_complete()
+
+        await pilot.press("u")
+        await app.workers.wait_for_complete()
+        assert ids(app) == [second]
+        await app.show_tab("open")
+        await pilot.press("u")
+        await app.workers.wait_for_complete()
+        assert ids(app) == [None, first]
+        await pilot.press("u")
+        assert notices[-3:] == ["Undone", "Undone", None]
+
+    with Store(db) as store:
+        restored = store.get(int(second))
+        last = store.history(int(first))[-1]
+    assert restored.snoozed_until == until.replace(microsecond=0)
+    assert (last.action, last.actor, last.note) == ("reopened", "user", "undo")
