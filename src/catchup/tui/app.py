@@ -210,11 +210,12 @@ class CatchupApp(App[None]):
         await self.check_agent()
 
     async def on_unmount(self) -> None:
-        self.store.close()
         try:
             await asyncio.wait_for(self.tab_title.restore(), TAB_RESTORE_SECONDS)
         except (CatchupError, TimeoutError):
             pass  # The tab keeps the counts; the next start reads them as its own label.
+        # Closed last: a worker that resumes during the await above may still read the store.
+        self.store.close()
 
     async def poll(self) -> None:
         """Reload when the database changed or a minute passed."""
@@ -232,10 +233,12 @@ class CatchupApp(App[None]):
 
     async def reload(self) -> None:
         """Read the current tab from the store and redraw, keeping the selected item."""
+        # Textual removes the widgets before it stops the app's timers and workers, so during
+        # shutdown the store may be closed already, and a read has nothing left to show it in.
+        if not self.is_running:
+            return
         tab = self.tab
         snapshot = await self.store.run(lambda store: load(store, tab))
-        # Textual removes the widgets before it stops the app's timers and workers,
-        # so a read that finishes during shutdown has nothing left to show it in.
         if not self.is_running:
             return
         now = utc_now()

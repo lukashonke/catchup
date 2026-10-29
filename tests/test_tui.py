@@ -208,6 +208,16 @@ async def test_closing_while_a_store_read_is_in_flight_does_not_fail(
         app.run_worker(app.poll())
 
 
+async def test_a_reload_after_shutdown_does_not_touch_the_closed_store(db: Path) -> None:
+    add(db, "waiting", "Answer Ken", 2)
+
+    app = CatchupApp(Config())
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+    # A poll whose read finished during shutdown reloads after the store has closed.
+    await app.reload()
+
+
 async def test_keys_close_items_and_switch_tabs(db: Path) -> None:
     done = add(db, "waiting", "Answer Ken", 2)
     ignored = add(db, "waiting", "Approve the budget", 1)
