@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from catchup import CatchupError
-from catchup.config import Config, default_config_path, load_config
+from catchup.config import Config, default_config_path, load_config, save_config
 
 
 def test_missing_file_gives_defaults(tmp_path: Path) -> None:
@@ -49,3 +49,42 @@ def test_rejects_empty_open_label(tmp_path: Path) -> None:
     path.write_text('open_label = " "\n')
     with pytest.raises(CatchupError, match="open_label .* must be a non-empty string"):
         load_config(path)
+
+
+def test_reads_the_agent_settings(tmp_path: Path) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text(
+        'agent_prompt = """\nCatch me up.\n"""\nagent_command = ["claude", "-p"]\nagent_every = "30m"\n'
+    )
+    config = load_config(path)
+    assert (config.agent_prompt, config.agent_command, config.agent_every) == (
+        "Catch me up.",
+        ("claude", "-p"),
+        "30m",
+    )
+
+
+@pytest.mark.parametrize(
+    ("toml", "message"),
+    [
+        ('agent_every = "1d"', "agent_every .* cannot read '1d' as an interval"),
+        ("agent_command = []", "agent_command .* non-empty list of strings"),
+        ("agent_prompt = 3", "agent_prompt .* must be a string"),
+    ],
+)
+def test_rejects_bad_agent_settings(tmp_path: Path, toml: str, message: str) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text(toml)
+    with pytest.raises(CatchupError, match=message):
+        load_config(path)
+
+
+def test_save_keeps_comments_and_leaves_defaults_out(tmp_path: Path) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text('# My opener.\nopen_command = ["/bin/opener"]\nagent_every = "4h"\n')
+    config = Config(open_command=["/bin/opener", "--tab"], agent_prompt="Line one.\nLine two.")
+    save_config(config, path)
+    text = path.read_text()
+    assert text.startswith("# My opener.\n")
+    assert "agent_every" not in text and "open_label" not in text
+    assert load_config(path) == config

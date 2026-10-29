@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from catchup import CatchupError
-from catchup.when import format_age, parse_since, parse_until
+from catchup.when import format_age, parse_every, parse_since, parse_until
 
 # Wednesday 2026-10-28 23:30 in Prague (CET, UTC+1, after the DST switch on 10-25).
 NOW = datetime(2026, 10, 28, 22, 30, tzinfo=UTC)
@@ -71,3 +71,14 @@ def test_format_age_rounds_down_and_says_now_under_a_minute() -> None:
         "1h",
         "3d",
     ]
+
+
+@pytest.mark.parametrize(("text", "minutes"), [("30m", 30), ("1h", 60), ("4h", 240)])
+def test_parse_every(text: str, minutes: int) -> None:
+    assert parse_every(text) == timedelta(minutes=minutes)
+
+
+@pytest.mark.parametrize("text", ["0m", "1d", "1 h", ""])
+def test_parse_every_rejects_other_forms(text: str) -> None:
+    with pytest.raises(CatchupError, match="use 30m, 1h or 4h"):
+        parse_every(text)

@@ -5,6 +5,7 @@ description = "A local inbox that an AI agent fills with the things waiting on y
 requires-python = ">=3.11"
 dependencies = [
     "textual>=8.2.8",
+    "tomlkit>=0.15.2",
 ]
 
 [project.scripts]

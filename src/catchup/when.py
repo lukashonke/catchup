@@ -1,4 +1,4 @@
-"""Parsing of the `--until` and `--since` values into UTC timestamps, and showing ages."""
+"""Parsing of the `--until` and `--since` values and the agent interval, and showing ages."""
 
 import re
 from datetime import UTC, date, datetime, time, timedelta
@@ -6,6 +6,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from catchup import CatchupError
 
 _RELATIVE = re.compile(r"(\d+)([dw])")
+_INTERVAL = re.compile(r"(\d+)([mh])")
 
 
 def parse_until(text: str, now: datetime) -> datetime:
@@ -20,6 +21,13 @@ def parse_until(text: str, now: datetime) -> datetime:
 def parse_since(text: str, now: datetime) -> datetime:
     """Return the past moment that `Nd`, `Nw` or `YYYY-MM-DD` names, in UTC."""
     return _parse(text, now, sign=-1, forms="1d, 3d, 1w or YYYY-MM-DD")
+
+
+def parse_every(text: str) -> timedelta:
+    """Return the interval that `Nm` or `Nh` names, at least one minute."""
+    if (match := _INTERVAL.fullmatch(text)) and int(match[1]) > 0:
+        return timedelta(minutes=int(match[1]) * (60 if match[2] == "h" else 1))
+    raise CatchupError(f"cannot read {text!r} as an interval; use 30m, 1h or 4h")
 
 
 def _parse(text: str, now: datetime, sign: int, forms: str) -> datetime:
