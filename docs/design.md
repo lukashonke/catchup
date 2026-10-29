@@ -65,7 +65,7 @@ catchup snooze ID --until 1d|3d|1w|mon|YYYY-MM-DD [--note TEXT]
 - `-` as the value of `--body` or `--prompt` reads the value from stdin, so an agent can pass long text without shell quoting.
 - `--link` on `update` replaces the whole link list.
 - `--link` splits at the first `=`. A prefix before the first `:` is a type only if it names a known link type, case-insensitive. So `doc:Spec=https://…` has type Doc, while `Re: hello=https://…` is a label.
-- `list` without flags returns open waiting items. `--since` takes the same forms as `--until` in the past direction (`1d`, `3d`, `1w`, a date) and filters by `updated_at`. Each listed item includes its last event.
+- `list` without flags returns open waiting items. FYIs have no state, so they match only `--state open` and `--state all`. `--since` takes the same forms as `--until` in the past direction (`1d`, `3d`, `1w`, a date) and filters by `updated_at`. Each listed item includes its last event.
 - `show` returns the item with its full event history.
 - `done`, `ignore`, `reopen` and `snooze` reject FYIs with a clear error.
 - The CLI records events with actor `agent` unless `--by user` is given. The TUI records actor `user`.
