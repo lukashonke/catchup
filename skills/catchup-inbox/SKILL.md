@@ -49,6 +49,7 @@ An event with `"actor": "user"` is a decision the user made. Respect it:
 - `snoozed`: the user wants to see it later. If someone other than the user posts something new that needs the user, reopen it early with a note that names who posted. Otherwise leave its state and only update its content.
 - `ignored`: the user muted it. See the next rule.
 - `reopened`: the user wants it open. Do not close it unless the conversation clearly ends.
+- `opened`: the user opened the item in a coding agent and started working on it. It does not mean the item is handled: close it only when the conversation shows that it is.
 
 The same action repeated tells you something: an item snoozed three times is probably low priority.
 
@@ -168,6 +169,7 @@ Pass `--note` on every change, so the history explains itself: "Dana posted a fo
   "snoozed_until": null,
   "created_at": "2026-10-29T13:15:16Z",
   "updated_at": "2026-10-29T14:02:40Z",
+  "opened_at": null,
   "last_event": {"id": 7, "item_id": 2, "at": "2026-10-29T14:02:40Z", "actor": "user", "action": "reopened", "note": null},
   "events": [
     {"id": 2, "item_id": 2, "at": "2026-10-29T13:15:16Z", "actor": "agent", "action": "created", "note": "Dana asked in the billing channel"},
@@ -180,6 +182,7 @@ Pass `--note` on every change, so the history explains itself: "Dana posted a fo
 - Timestamps are UTC, in the form `2026-10-29T13:15:16Z`.
 - `state` is `null` for an FYI.
 - A snoozed item whose date has passed shows `"state": "open"` and `"snoozed_until": null`. Treat it as open.
+- `opened_at` is when the user last opened the item in a coding agent, or `null`.
 - `last_event` is the item's most recent event. `events` appears only in `show`.
 - `notes` appears only in `list`: the user's notes on the item, oldest first, such as `[{"at": "2026-10-29T14:05:00Z", "note": "Close when Tomáš replies"}]`. `show` has the same notes as `note` events with `"actor": "user"`.
-- `action` is one of `created`, `updated`, `done`, `snoozed`, `reopened`, `ignored` or `note`.
+- `action` is one of `created`, `updated`, `done`, `snoozed`, `reopened`, `ignored`, `note` or `opened`.

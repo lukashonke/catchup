@@ -20,7 +20,7 @@ Kind = Literal["waiting", "fyi"]
 State = Literal["open", "snoozed", "done", "ignored"]
 Priority = Literal["urgent", "normal", "low"]
 Actor = Literal["agent", "user"]
-Action = Literal["created", "updated", "done", "snoozed", "reopened", "ignored", "note"]
+Action = Literal["created", "updated", "done", "snoozed", "reopened", "ignored", "note", "opened"]
 
 SCHEMA_VERSION = 1
 
@@ -86,6 +86,8 @@ class Item:
     snoozed_until: datetime | None
     created_at: datetime
     updated_at: datetime
+    # When the user last opened the item in a coding agent.
+    opened_at: datetime | None
     last_event: Event | None
 
 
@@ -239,6 +241,15 @@ class Store:
             )
         return self._set_state(item_id, "snoozed", "snoozed", until, note, actor)
 
+    def mark_opened(self, item_id: int) -> Item:
+        """Record that the user opened the item in a coding agent."""
+        now = self._now()
+        with self._write():
+            self._require(item_id)
+            self._db.execute("UPDATE items SET updated_at = ? WHERE id = ?", (_ts(now), item_id))
+            self._event(item_id, now, "user", "opened", None)
+        return self.get(item_id)
+
     def get(self, item_id: int) -> Item:
         """Return one item with its effective state and last event."""
         rows = self._select("i.id = :id", {"id": item_id})
@@ -329,7 +340,9 @@ class Store:
             f"""
             SELECT i.*, {_EFFECTIVE_STATE} AS effective_state,
                    e.id AS e_id, e.at AS e_at, e.actor AS e_actor,
-                   e.action AS e_action, e.note AS e_note
+                   e.action AS e_action, e.note AS e_note,
+                   (SELECT max(at) FROM events WHERE item_id = i.id AND action = 'opened')
+                       AS opened_at
             FROM items i
             LEFT JOIN events e ON e.id = (SELECT max(id) FROM events WHERE item_id = i.id)
             WHERE {where}
@@ -446,5 +459,6 @@ def _item(row: sqlite3.Row) -> Item:
         snoozed_until=_dt(row["snoozed_until"]) if state == "snoozed" else None,
         created_at=_dt(row["created_at"]),
         updated_at=_dt(row["updated_at"]),
+        opened_at=_dt(row["opened_at"]) if row["opened_at"] else None,
         last_event=last_event,
     )

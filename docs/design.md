@@ -29,8 +29,9 @@ An item has:
 - `state`: `open`, `snoozed`, `done` or `ignored` for waiting items, empty for FYIs.
 - `snoozed_until`: a timestamp, set only while snoozed.
 - `created_at`, `updated_at`: timestamps that the store sets.
+- `opened_at`: when the user last opened the item in a coding agent. It is read from the events, not stored.
 
-An event has `item_id`, `at`, `actor` (`agent` or `user`), `action` (`created`, `updated`, `done`, `snoozed`, `reopened`, `ignored`, `note`) and an optional `note`.
+An event has `item_id`, `at`, `actor` (`agent` or `user`), `action` (`created`, `updated`, `done`, `snoozed`, `reopened`, `ignored`, `note`, `opened`) and an optional `note`.
 
 All timestamps are stored as ISO 8601 in UTC and shown in local time.
 

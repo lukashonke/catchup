@@ -203,3 +203,13 @@ def test_user_notes_are_only_the_notes_the_user_wrote(store: Store) -> None:
         first.id: ["close when Tomas replies"],
         second.id: ["ask Ken about it"],
     }
+
+
+def test_mark_opened_records_a_user_event(store: Store, clock: Clock) -> None:
+    item = store.add("fyi", "Deploy finished")
+    assert item.opened_at is None
+    clock.now = T0 + timedelta(hours=1)
+    opened = store.mark_opened(item.id)
+    assert opened.opened_at == opened.updated_at == clock.now
+    assert opened.last_event is not None
+    assert (opened.last_event.action, opened.last_event.actor) == ("opened", "user")

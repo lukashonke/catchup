@@ -372,6 +372,14 @@ class CatchupApp(App[None]):
             await open_item(item, self.config)
         except CatchupError as e:
             self.notify(str(e), title=f"{label} failed", severity="error", timeout=12, markup=False)
+            return
+        try:
+            await self.store.run(lambda store: store.mark_opened(item.id))
+        except (CatchupError, sqlite3.Error) as e:
+            self.notify(str(e), title="Not recorded as opened", severity="error", markup=False)
+            return
+        if self.is_running:
+            await self.reload()
 
 
 def _snooze(store: Store, item_id: int, until: datetime) -> Item:

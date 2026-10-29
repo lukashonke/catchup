@@ -76,10 +76,12 @@ def _row(item: Item, now: datetime) -> Table:
     link_type = item.links[0].type or "" if item.links else ""
     grid = Table.grid(expand=True, padding=(0, 1))
     grid.add_column(width=1, no_wrap=True)
+    grid.add_column(width=1, no_wrap=True)
     grid.add_column(ratio=1)
     grid.add_column(width=8, no_wrap=True)
     grid.add_column(width=4, no_wrap=True, justify="right")
     grid.add_row(
+        Text("↗", style=theme.DIM) if item.opened_at else Text(""),
         marker,
         _Line(Text(item.title, style=theme.FEED if fyi else "")),
         Text(link_type, style=theme.LINK_COLORS.get(link_type, theme.DIM)),
@@ -209,6 +211,8 @@ def _meta(item: Item, now: datetime) -> Content:
         Content.styled(f" {state} ", f"{theme.FOREGROUND} on {theme.SELECTED}"),
         Content(f" · first seen {day(item.created_at)} · {_ago(now - item.created_at)}"),
     ]
+    if item.opened_at:
+        parts.append(Content(f" · opened {_ago(now - item.opened_at)}"))
     if item.kind == "waiting" and item.priority == "urgent":
         parts += [Content(" · "), Content.styled("urgent", theme.URGENT)]
     return Content.assemble(*parts)

@@ -113,9 +113,15 @@ async def test_enter_opens_the_selected_item(db: Path, monkeypatch: pytest.Monke
         await pilot.pause()
         await pilot.press("enter")
         await app.workers.wait_for_complete()
+        await app.workers.wait_for_complete()
+        assert "opened just now" in text(app, "#d-meta")
+        assert text(app, "#list").splitlines()[1].split() == ["↗", "Answer", "Ken", "1d"]
     assert open_item.await_args is not None
     item, used_config = open_item.await_args.args
     assert (item.title, used_config) == ("Answer Ken", config)
+    with Store(db) as store:
+        last = store.history(item.id)[-1]
+    assert (last.action, last.actor) == ("opened", "user")
 
 
 async def test_narrow_terminal_puts_details_below_the_list(db: Path) -> None:
