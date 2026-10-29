@@ -95,4 +95,4 @@ The TUI is a two-pane view:
 - **Details**, on the right: the title, the state, when it was first seen, the body, the links as clickable chips with their type, the buttons, the prompt that "Open in Claude" will send, and the history.
 - **Buttons** for a waiting item: Open in Claude, Done, Snooze (1d, 3d, until Monday), Ignore. For done and ignored items: Open in Claude and Reopen. For an FYI: Open in Claude only.
 
-In a narrow terminal the details pane moves below the list. Arrow keys and the mouse select items, and Enter is the same as "Open in Claude". The first version has no other shortcuts.
+In a narrow terminal the details pane moves below the list. Arrow keys and the mouse select items, and Enter is the same as "Open in Claude", and q quits. The first version has no other shortcuts.

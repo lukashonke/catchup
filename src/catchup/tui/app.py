@@ -38,7 +38,10 @@ class CatchupApp(App[None]):
         (TINY_COLUMNS, "-narrow"),
         (NARROW_COLUMNS, "-wide"),
     ]
-    BINDINGS: ClassVar = [Binding("ctrl+c", "quit", "Quit", show=False, priority=True)]
+    BINDINGS: ClassVar = [
+        Binding("q", "quit", "Quit", show=False),
+        Binding("ctrl+c", "quit", "Quit", show=False, priority=True),
+    ]
 
     def __init__(self, config: Config) -> None:
         super().__init__()
@@ -65,7 +68,7 @@ class CatchupApp(App[None]):
             Content.from_markup(
                 "[b $ink on $dim] ↑↓ [/] select  [b $ink on $dim] enter [/] open in"
                 " Claude  [b $ink on $dim] click [/] a link to open it"
-                "  [b $ink on $dim] ctrl+q [/] quit"
+                "  [b $ink on $dim] q [/] quit"
             ),
             id="footer",
         )
