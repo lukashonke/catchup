@@ -5,11 +5,11 @@ file next to the database records the process id and the start time of the last 
 around reading and writing it makes sure only one TUI starts each run.
 """
 
-import asyncio
 import fcntl
 import json
 import os
 import subprocess
+import tempfile
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -56,26 +56,30 @@ def is_due(config: Config, now: datetime) -> bool:
     return state.started_at is None or now - state.started_at >= parse_every(config.agent_every)
 
 
-async def start(
+def start(
     config: Config, now: datetime, environ: Mapping[str, str] = os.environ
-) -> asyncio.subprocess.Process | None:
+) -> subprocess.Popen[bytes] | None:
     """Start the agent with the prompt on stdin; return None when a run is already going.
 
     Raise CatchupError when the agent is not configured or the command cannot start.
     """
     if not config.agent_prompt:
         raise CatchupError("the agent has no prompt; set agent_prompt in the settings")
+    # Nothing here awaits: the lock is a blocking flock, and read_state() takes it on the
+    # same event loop, so holding it across an await would freeze the TUI.
     with _locked() as path:
         if _read(path).running:
             return None
-        log = log_path()
-        with log.open("w", encoding="utf-8") as output:
+        # A file rather than a pipe, so the prompt needs no writer that outlives this call.
+        with tempfile.TemporaryFile() as prompt, log_path().open("w", encoding="utf-8") as output:
+            prompt.write(config.agent_prompt.encode())
+            prompt.seek(0)
             try:
-                process = await asyncio.create_subprocess_exec(
-                    *config.agent_command,
+                process = subprocess.Popen(
+                    config.agent_command,
                     cwd=Path.home(),
                     env=dict(environ),
-                    stdin=subprocess.PIPE,
+                    stdin=prompt,
                     stdout=output,
                     stderr=subprocess.STDOUT,
                     # Its own session, so closing the TUI's terminal does not stop the run.
@@ -89,10 +93,6 @@ async def start(
             json.dumps({"pid": process.pid, "started_at": now.astimezone(UTC).isoformat()}),
             encoding="utf-8",
         )
-    assert process.stdin is not None
-    process.stdin.write(config.agent_prompt.encode())
-    await process.stdin.drain()
-    process.stdin.close()
     return process
 
 

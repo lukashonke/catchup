@@ -3,12 +3,13 @@ import subprocess
 from collections.abc import Callable, Sequence
 from datetime import timedelta
 from pathlib import Path
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from textual.geometry import Region
 from textual.widgets import Input
 
+from catchup import agent
 from catchup.config import Config, load_config
 from catchup.store import Kind, Link, Priority, Store, utc_now
 from catchup.tui.app import CatchupApp
@@ -17,14 +18,17 @@ from catchup.tui.settings import Settings
 from catchup.tui.widgets import Details, ItemList
 from catchup.when import parse_until
 
+# The real ones, for the test that runs a harmless stand-in agent.
+REAL_IS_DUE, REAL_START = agent.is_due, agent.start
+
 
 @pytest.fixture(autouse=True)
-def no_agent_runs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> AsyncMock:
+def no_agent_runs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Mock:
     """Keep every test from starting a real agent run or renaming the herdr tab it runs in."""
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
     monkeypatch.delenv("HERDR_ENV", raising=False)
     monkeypatch.setattr("catchup.agent.is_due", lambda config, now: False)
-    start = AsyncMock(return_value=None)
+    start = Mock(return_value=None)
     monkeypatch.setattr("catchup.agent.start", start)
     return start
 
@@ -300,17 +304,17 @@ async def test_settings_refuse_a_bad_interval(
     assert not (tmp_path / "config").exists()
 
 
-async def test_c_starts_the_agent_run(db: Path, no_agent_runs: AsyncMock) -> None:
+async def test_c_starts_the_agent_run(db: Path, no_agent_runs: Mock) -> None:
     start = no_agent_runs
     app = CatchupApp(Config(agent_prompt="Sync my inbox."))
     async with app.run_test(size=(140, 40)) as pilot:
         await pilot.pause()
         await pilot.press("r")
         await app.workers.wait_for_complete()
-        assert start.await_count == 0
+        assert start.call_count == 0
         await pilot.press("c")
         await app.workers.wait_for_complete()
-        assert start.await_count == 1
+        assert start.call_count == 1
         assert "c  catch up now" in text(app, "#footer-keys")
 
 
@@ -551,3 +555,29 @@ async def test_a_failing_herdr_is_reported_once_and_left_alone(
         await app.workers.wait_for_complete()
     assert len(calls) == 1
     assert notices.count("Cannot show the counts on the herdr tab") == 1
+
+
+async def test_an_agent_run_due_at_start_does_not_freeze_the_screen(
+    db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    add(db, "waiting", "Answer Ken", 1)
+    monkeypatch.setattr("catchup.agent.is_due", REAL_IS_DUE)
+    monkeypatch.setattr("catchup.agent.start", REAL_START)
+    stand_in = ("sh", "-c", "cat > /dev/null; sleep 0.5")
+    # App.run() makes tasks eager and run_test() does not. An eager worker once took the agent
+    # lock and held it across an await, while check_agent blocked on the same lock.
+    loop = asyncio.get_running_loop()
+    if hasattr(asyncio, "eager_task_factory"):
+        loop.set_task_factory(asyncio.eager_task_factory)
+    try:
+        app = CatchupApp(Config(agent_prompt="Sync my inbox.", agent_command=stand_in))
+        async with app.run_test(size=(140, 40)) as pilot:
+            await pilot.pause(0.3)
+            assert ids(app)[1] is not None
+            assert "agent running since" in text(app, "#last-run")
+            # c during the run must not stop the app from noticing that the run ended.
+            await pilot.press("c")
+            await pilot.pause(2)
+            assert not agent.read_state().running
+    finally:
+        loop.set_task_factory(None)

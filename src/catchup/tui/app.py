@@ -43,6 +43,7 @@ POLL_SECONDS = 2.0
 SEEN_SECONDS = 1.0
 TAB_RESTORE_SECONDS = 2.0
 AGENT_CHECK_SECONDS = 30.0
+AGENT_POLL_SECONDS = 1.0
 NARROW_COLUMNS = 110
 TINY_COLUMNS = 62
 _CHANGED = {"done": "Done", "ignored": "Ignored", "open": "Reopened"}
@@ -171,10 +172,12 @@ class CatchupApp(App[None]):
             raise SkipAction
         self._run_agent()
 
-    @work(group="agent", exclusive=True)
+    # Not exclusive: a second start must not cancel the worker that reaps the running agent,
+    # or the finished agent stays a zombie that reads as still running.
+    @work(group="agent")
     async def _run_agent(self) -> None:
         try:
-            process = await agent.start(self.config, utc_now())
+            process = agent.start(self.config, utc_now())
         except (CatchupError, OSError) as e:
             self.notify(str(e), title="Agent run failed", severity="error", markup=False)
             return
@@ -183,7 +186,9 @@ class CatchupApp(App[None]):
             return
         self.notify("Running in the background.", title="Agent started", markup=False)
         await self.check_agent()
-        code = await process.wait()
+        # Polled rather than waited on in a thread, so quitting never waits for the run to end.
+        while (code := process.poll()) is None:
+            await asyncio.sleep(AGENT_POLL_SECONDS)
         if code != 0 and self.is_running:
             self.notify(
                 f"It exited with code {code}. The output is in {agent.log_path()}.",
