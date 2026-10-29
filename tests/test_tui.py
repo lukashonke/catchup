@@ -525,10 +525,10 @@ async def test_counts_show_on_the_herdr_tab_until_exit(
     async with app.run_test(size=(140, 40)) as pilot:
         await pilot.pause()
         await app.workers.wait_for_complete()
-        assert labels == ["catchup 1 · 1 new"]
+        assert labels == ["inbox 1 · 1 new"]
         await pilot.press("space")
         await app.workers.wait_for_complete()
-        assert labels[-1] == "catchup 0"
+        assert labels[-1] == "inbox 0"
     assert labels[-1] == "inbox"
 
 

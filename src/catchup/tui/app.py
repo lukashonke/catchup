@@ -273,7 +273,7 @@ class CatchupApp(App[None]):
         )
         self.query_one("#summary", Static).update(summary)
         new = f" · {snapshot.new} new" if snapshot.new else ""
-        self._show_tab_title(f"catchup {snapshot.counts['open']}{new}")
+        self._show_tab_title(f"{snapshot.counts['open']}{new}")
         last = snapshot.last_agent_at
         state = self.agent_state
         if state.running and state.started_at:
@@ -294,10 +294,10 @@ class CatchupApp(App[None]):
         self.query_one("#tabs", Static).update(Content(" ").join(tabs))
 
     @work(group="herdr", exclusive=True)
-    async def _show_tab_title(self, text: str) -> None:
+    async def _show_tab_title(self, counts: str) -> None:
         """Show the counts on the herdr tab, so they are visible from the other tabs."""
         try:
-            await self.tab_title.show(text)
+            await self.tab_title.show(counts)
         except CatchupError as e:
             # Report it once and stop trying; the inbox works the same without it.
             self.tab_title.tab = None

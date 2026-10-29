@@ -128,39 +128,42 @@ def tab_info(label: str) -> tuple[int, str, str]:
     return (0, json.dumps({"result": {"tab": {"label": label}}}), "")
 
 
-async def test_tab_title_renames_the_tab_once_per_text_and_restores_it(
+async def test_tab_title_appends_the_counts_once_per_text_and_restores_the_label(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fake = FakeRun(tab_info("inbox"), OK, OK, OK)
     monkeypatch.setattr("catchup.herdr.run_command", fake)
     title = TabTitle(HERDR)
-    await title.show("catchup 3 · 1 new")
-    await title.show("catchup 3 · 1 new")
-    await title.show("catchup 3")
+    await title.show("3 · 1 new")
+    await title.show("3 · 1 new")
+    await title.show("3")
     await title.restore()
     assert [argv[1:] for argv, _ in fake.calls] == [
         ["tab", "get", "w1:t2"],
-        ["tab", "rename", "w1:t2", "catchup 3 · 1 new"],
-        ["tab", "rename", "w1:t2", "catchup 3"],
+        ["tab", "rename", "w1:t2", "inbox 3 · 1 new"],
+        ["tab", "rename", "w1:t2", "inbox 3"],
         ["tab", "rename", "w1:t2", "inbox"],
     ]
 
 
-async def test_tab_title_restores_catchup_after_a_label_left_by_a_crash(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize(
+    ("start", "base"), [("catchup 12 · 3 new", "catchup"), ("inbox 7", "inbox"), ("", "catchup")]
+)
+async def test_tab_title_drops_counts_left_by_a_crash_and_names_an_empty_label(
+    monkeypatch: pytest.MonkeyPatch, start: str, base: str
 ) -> None:
-    fake = FakeRun(tab_info("catchup 12 · 3 new"), OK, OK)
+    fake = FakeRun(tab_info(start), OK, OK)
     monkeypatch.setattr("catchup.herdr.run_command", fake)
     title = TabTitle(HERDR)
-    await title.show("catchup 4")
+    await title.show("4")
     await title.restore()
-    assert fake.calls[-1][0][1:] == ["tab", "rename", "w1:t2", "catchup"]
+    assert [argv[-1] for argv, _ in fake.calls[1:]] == [f"{base} 4", base]
 
 
 async def test_tab_title_does_nothing_outside_herdr(monkeypatch: pytest.MonkeyPatch) -> None:
     fake = FakeRun()
     monkeypatch.setattr("catchup.herdr.run_command", fake)
     title = TabTitle({"HERDR_TAB_ID": "w1:t2"})
-    await title.show("catchup 3")
+    await title.show("3")
     await title.restore()
     assert fake.calls == []

@@ -11,8 +11,10 @@ from catchup import CatchupError
 from catchup.opener import run_command
 
 _LABEL_LENGTH = 32
-# The labels TabTitle sets, so a label left behind by a crashed TUI is not restored as the original.
-_COUNTS_LABEL = re.compile(r"catchup \d+( · \d+ new)?")
+# The counts TabTitle appends, so a label left behind by a crashed TUI loses them again.
+# shortcut: a label that ends in a number of its own, such as "sprint 42", loses it too;
+# keep the original label in a file if that ever bites.
+_COUNTS = re.compile(r"\s+\d+( · \d+ new)?$")
 
 
 async def open_in_herdr(item_id: int, title: str, prompt: str, environ: Mapping[str, str]) -> None:
@@ -42,31 +44,34 @@ async def open_in_herdr(item_id: int, title: str, prompt: str, environ: Mapping[
 
 
 class TabTitle:
-    """Show a text, such as the inbox counts, as the label of the herdr tab the TUI runs in."""
+    """Show the inbox counts after the label of the herdr tab the TUI runs in."""
 
     def __init__(self, environ: Mapping[str, str]) -> None:
         self.environ = environ
         self.tab = environ.get("HERDR_TAB_ID") if environ.get("HERDR_ENV") == "1" else None
-        self.original: str | None = None
+        # The tab's label without counts, read on the first show; also what restore() puts back.
+        self.base: str | None = None
         self.shown: str | None = None
 
-    async def show(self, text: str) -> None:
-        """Set the tab label to `text` unless it shows that already; raise CatchupError on failure."""
-        if self.tab is None or text == self.shown:
+    async def show(self, counts: str) -> None:
+        """Label the tab `<base> <counts>` unless it shows that already; raise CatchupError."""
+        if self.tab is None:
             return
         herdr = self.environ.get("HERDR_BIN_PATH") or "herdr"
-        if self.original is None:
+        if self.base is None:
             label = (await _call(self.environ, herdr, "tab", "get", self.tab))["tab"]["label"]
-            self.original = "catchup" if _COUNTS_LABEL.fullmatch(label) else label
-        await _call(self.environ, herdr, "tab", "rename", self.tab, text)
-        self.shown = text
+            self.base = _COUNTS.sub("", label).strip() or "catchup"
+        text = f"{self.base} {counts}"
+        if text != self.shown:
+            await _call(self.environ, herdr, "tab", "rename", self.tab, text)
+            self.shown = text
 
     async def restore(self) -> None:
-        """Give the tab back the label it had before; raise CatchupError on failure."""
-        if self.tab is None or self.original is None or self.shown is None:
+        """Give the tab back its label without counts; raise CatchupError on failure."""
+        if self.tab is None or self.base is None or self.shown is None:
             return
         herdr = self.environ.get("HERDR_BIN_PATH") or "herdr"
-        await _call(self.environ, herdr, "tab", "rename", self.tab, self.original)
+        await _call(self.environ, herdr, "tab", "rename", self.tab, self.base)
         self.shown = None
 
 
