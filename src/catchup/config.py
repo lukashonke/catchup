@@ -13,6 +13,7 @@ class Config:
     """User settings; every field is optional."""
 
     open_command: list[str] | None = None
+    open_label: str = "Open in Claude"
 
 
 def default_config_path() -> Path:
@@ -40,4 +41,9 @@ def load_config(path: Path | None = None) -> Config:
             f"open_command in {path} must be a non-empty list of strings,"
             ' for example open_command = ["/path/to/my-opener.sh"]'
         )
-    return Config(open_command=command)
+    label = data.get("open_label", Config.open_label)
+    if not (isinstance(label, str) and label.strip()):
+        raise CatchupError(
+            f'open_label in {path} must be a non-empty string, for example open_label = "Open in Codex"'
+        )
+    return Config(open_command=command, open_label=label.strip())

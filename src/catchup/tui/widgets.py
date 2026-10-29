@@ -99,7 +99,7 @@ def _section(left: str, right: str) -> Table:
 class ItemList(OptionList):
     """The waiting items of a state tab, and on the Open tab the feed below them."""
 
-    BINDINGS: ClassVar = [Binding("enter", "open", "Open in Claude", show=False)]
+    BINDINGS: ClassVar = [Binding("enter", "open", "Open", show=False)]
 
     class OpenRequested(Message):
         """Enter was pressed on the selected item."""
@@ -155,7 +155,7 @@ class Details(VerticalScroll):
         # Two groups, so a narrow pane can put the second one on its own line.
         with Horizontal(id="d-actions"):
             with Horizontal(id="actions-main"):
-                yield Button("Open in Claude", id="open", classes="primary", compact=True)
+                yield Button("Open", id="open", classes="primary", compact=True)
                 yield Button("Done", id="done", compact=True)
                 yield Button("Reopen", id="reopen", compact=True)
             with Horizontal(id="actions-more"):
@@ -189,7 +189,7 @@ class Details(VerticalScroll):
         self.query_one("#done").display = waiting_open
         self.query_one("#actions-more").display = waiting_open
         self.query_one("#reopen").display = closed
-        # On an FYI, Open in Claude is the only action, so it does not need to stand out.
+        # On an FYI, the open button is the only action, so it does not need to stand out.
         self.query_one("#open").set_class(item.kind == "waiting", "primary")
 
         label = "PROMPT SET BY AGENT" if item.prompt else "PROMPT (DEFAULT)"

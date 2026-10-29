@@ -36,3 +36,16 @@ def test_rejects_invalid_toml(tmp_path: Path) -> None:
 def test_path_follows_xdg_config_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
     assert default_config_path() == tmp_path / "catchup" / "config.toml"
+
+
+def test_reads_open_label(tmp_path: Path) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text('open_label = "Open in Codex"\n')
+    assert load_config(path).open_label == "Open in Codex"
+
+
+def test_rejects_empty_open_label(tmp_path: Path) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text('open_label = " "\n')
+    with pytest.raises(CatchupError, match="open_label .* must be a non-empty string"):
+        load_config(path)

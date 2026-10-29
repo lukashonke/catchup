@@ -1,4 +1,4 @@
-"""Open in Claude: building the prompt and running the command that opens an item."""
+"""The open action: building the prompt and running the command that opens an item."""
 
 import asyncio
 import os
@@ -23,7 +23,7 @@ def default_prompt(item: Item) -> str:
 
 
 def prompt_of(item: Item) -> str:
-    """Return the prompt that Open in Claude sends: the agent's, else the default one."""
+    """Return the prompt that the open action sends: the agent's, else the default one."""
     return item.prompt or default_prompt(item)
 
 
@@ -51,7 +51,7 @@ async def open_item(item: Item, config: Config, environ: Mapping[str, str] = os.
         await open_in_herdr(item.id, item.title, prompt_of(item), environ)
     else:
         raise CatchupError(
-            f"Open in Claude has nothing to run. Set open_command in {default_config_path()},"
+            f"{config.open_label} has nothing to run. Set open_command in {default_config_path()},"
             ' for example open_command = ["/path/to/my-opener.sh"]'
         )
 
