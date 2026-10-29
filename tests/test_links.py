@@ -46,9 +46,7 @@ def test_parse_link(spec: str, expected: Link) -> None:
     assert parse_link(spec) == expected
 
 
-@pytest.mark.parametrize(
-    "spec", ["no-equals", "=https://x.test", "label=", "https://x.test/?a=b"]
-)
+@pytest.mark.parametrize("spec", ["no-equals", "=https://x.test", "label=", "https://x.test/?a=b"])
 def test_parse_link_rejects_malformed(spec: str) -> None:
     with pytest.raises(CatchupError):
         parse_link(spec)

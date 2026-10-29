@@ -51,9 +51,7 @@ def resolve(link: Link) -> Link:
         return Link(link.label, link.url, infer_type(link.url))
     canonical = _canonical_type(link.type)
     if canonical is None:
-        raise CatchupError(
-            f"unknown link type {link.type!r}; use one of {', '.join(LINK_TYPES)}"
-        )
+        raise CatchupError(f"unknown link type {link.type!r}; use one of {', '.join(LINK_TYPES)}")
     return Link(link.label, link.url, canonical)
 
 
