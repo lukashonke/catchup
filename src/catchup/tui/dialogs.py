@@ -1,4 +1,4 @@
-"""The small dialogs over the inbox: the snooze picker."""
+"""The small dialogs over the inbox: the snooze picker and the note editor."""
 
 from datetime import datetime
 from typing import ClassVar
@@ -10,7 +10,7 @@ from textual.binding import Binding
 from textual.containers import Vertical
 from textual.content import Content
 from textual.screen import ModalScreen
-from textual.widgets import Input, OptionList, Static
+from textual.widgets import Input, OptionList, Static, TextArea
 from textual.widgets.option_list import Option
 
 from catchup import CatchupError
@@ -79,6 +79,32 @@ class SnoozePicker(ModalScreen[datetime | None]):
             self.notify(str(e), title="Not snoozed", severity="error", markup=False)
             return
         self.dismiss(until)
+
+
+class NoteEditor(ModalScreen[str | None]):
+    """Write a note on an item; dismiss with the text, or None on cancel or when it is empty."""
+
+    BINDINGS: ClassVar = [
+        Binding("escape", "dismiss(None)", "Cancel", show=False),
+        Binding("ctrl+s", "save", "Save", show=False),
+    ]
+
+    def __init__(self, title: str) -> None:
+        super().__init__()
+        self.item_title = title
+
+    def compose(self) -> ComposeResult:
+        with Vertical(classes="dialog"):
+            yield Static("Note", classes="dialog-title")
+            yield Static(Content(self.item_title), classes="dialog-hint")
+            yield TextArea(id="note", soft_wrap=True)
+            yield Static(
+                "The agent reads your notes on its next run.\nctrl+s save · esc cancel",
+                classes="dialog-keys",
+            )
+
+    def action_save(self) -> None:
+        self.dismiss(self.query_one(TextArea).text.strip() or None)
 
 
 def _choice(number: int, label: str, until: datetime) -> Table:

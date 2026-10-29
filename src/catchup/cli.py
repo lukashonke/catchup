@@ -146,7 +146,16 @@ def _list(store: Store, args: argparse.Namespace) -> None:
     since = parse_since(args.since, utc_now()) if args.since else None
     items = store.list(state=args.state, kind=args.kind, since=since)
     if args.json:
-        _print_json([asdict(item) for item in items])
+        notes = store.user_notes()
+        _print_json(
+            [
+                {
+                    **asdict(item),
+                    "notes": [{"at": n.at, "note": n.note} for n in notes.get(item.id, [])],
+                }
+                for item in items
+            ]
+        )
     elif not items:
         print("No items match.")
     else:

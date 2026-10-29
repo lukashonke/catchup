@@ -189,3 +189,17 @@ def test_newer_schema_is_refused(tmp_path: Path) -> None:
         db.execute(f"PRAGMA user_version = {SCHEMA_VERSION + 1}")
     with pytest.raises(CatchupError, match="upgrade catchup"):
         Store(path)
+
+
+def test_user_notes_are_only_the_notes_the_user_wrote(store: Store) -> None:
+    first = store.add("waiting", "Answer Jana")
+    second = store.add("fyi", "Deploy finished")
+    store.update(first.id, note="the agent's note")
+    store.update(first.id, note="close when Tomas replies", actor="user")
+    store.done(first.id, note="replied", actor="user")
+    store.update(second.id, note="ask Ken about it", actor="user")
+    notes = store.user_notes()
+    assert {item_id: [n.note for n in events] for item_id, events in notes.items()} == {
+        first.id: ["close when Tomas replies"],
+        second.id: ["ask Ken about it"],
+    }

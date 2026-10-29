@@ -11,7 +11,7 @@ from textual.widgets import Input
 from catchup.config import Config, load_config
 from catchup.store import Kind, Link, Priority, Store, utc_now
 from catchup.tui.app import CatchupApp
-from catchup.tui.dialogs import SnoozePicker
+from catchup.tui.dialogs import NoteEditor, SnoozePicker
 from catchup.tui.settings import Settings
 from catchup.tui.widgets import Details, ItemList
 from catchup.when import parse_until
@@ -361,3 +361,24 @@ async def test_snooze_picker_keeps_a_bad_time_open(db: Path) -> None:
         await pilot.pause()
         assert isinstance(app.screen, SnoozePicker)
         assert app.screen.query_one(Input).value == "2020-01-01"
+
+
+async def test_n_adds_a_note_as_the_user(db: Path) -> None:
+    fyi = add(db, "fyi", "Release shipped", 0)
+
+    app = CatchupApp(Config())
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        await pilot.press("n", "escape")
+        await pilot.press("n", "space", "ctrl+s")
+        assert not isinstance(app.screen, NoteEditor)
+        await pilot.press("n", *"Close when Tomas replies", "ctrl+s")
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        assert "note: Close when Tomas replies" in text(app, "#d-history")
+
+    with Store(db) as store:
+        assert [(e.actor, e.action, e.note) for e in store.history(int(fyi))] == [
+            ("agent", "created", None),
+            ("user", "note", "Close when Tomas replies"),
+        ]

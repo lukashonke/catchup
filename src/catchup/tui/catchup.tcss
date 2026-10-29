@@ -263,7 +263,7 @@ Settings {
     }
 }
 
-SnoozePicker {
+SnoozePicker, NoteEditor {
     align: center middle;
     background: $chrome 60%;
 }
@@ -308,7 +308,7 @@ SnoozePicker {
             background-tint: transparent;
         }
     }
-    & > Input {
+    & > Input, & > TextArea {
         margin-top: 1;
         border: none;
         height: 1;
@@ -317,5 +317,8 @@ SnoozePicker {
         &:focus {
             background: $selected;
         }
+    }
+    & > TextArea {
+        height: 8;
     }
 }

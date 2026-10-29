@@ -281,6 +281,16 @@ class Store:
             params["since"] = _ts(since)
         return self._select(" AND ".join(where), params)
 
+    def user_notes(self) -> dict[int, list[Event]]:
+        """Return the notes the user wrote, by item id, oldest first."""
+        notes: dict[int, list[Event]] = {}
+        rows = self._db.execute(
+            "SELECT * FROM events WHERE actor = 'user' AND action = 'note' ORDER BY id"
+        )
+        for row in rows:
+            notes.setdefault(row["item_id"], []).append(_event(row))
+        return notes
+
     def last_agent_event_at(self) -> datetime | None:
         """Return when the agent last changed anything, or None if it never has."""
         at = self._db.execute("SELECT max(at) FROM events WHERE actor = 'agent'").fetchone()[0]

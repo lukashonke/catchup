@@ -139,3 +139,12 @@ def test_no_command_starts_the_tui(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("catchup.tui.run", lambda: started.append(True) or 0)
     assert main([]) == 0
     assert started == [True]
+
+
+def test_list_json_carries_the_user_notes(capsys: pytest.CaptureFixture[str]) -> None:
+    item = run_json(capsys, "add", "--kind=waiting", "--title=t")["id"]
+    run_json(capsys, "update", str(item), "--note=agent note")
+    run_json(capsys, "update", str(item), "--note=close when Tomas replies", "--by=user")
+    [listed] = run_json(capsys, "list")
+    assert [n["note"] for n in listed["notes"]] == ["close when Tomas replies"]
+    assert listed["notes"][0]["at"].endswith("Z")

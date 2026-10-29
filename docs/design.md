@@ -65,7 +65,7 @@ catchup snooze ID --until 3h|1d|3d|1w|mon|tomorrow|YYYY-MM-DD [--note TEXT]
 - `-` as the value of `--body` or `--prompt` reads the value from stdin, so an agent can pass long text without shell quoting.
 - `--link` on `update` replaces the whole link list.
 - `--link` splits at the first `=`. A prefix before the first `:` is a type only if it names a known link type, case-insensitive. So `doc:Spec=https://…` has type Doc, while `Re: hello=https://…` is a label.
-- `list` without flags returns open waiting items. FYIs have no state, so they match only `--state open` and `--state all`. `--since` takes `1d`, `3d`, `1w` or a date, counted back from now, and filters by `updated_at`. Each listed item includes its last event.
+- `list` without flags returns open waiting items. FYIs have no state, so they match only `--state open` and `--state all`. `--since` takes `1d`, `3d`, `1w` or a date, counted back from now, and filters by `updated_at`. Each listed item includes its last event, and in JSON a `notes` array with the user's notes (`at`, `note`), so the agent sees them without `show`.
 - `show` returns the item with its full event history.
 - `snooze --until` counts `3h`, `1d` and `1w` from now. `mon`, `tomorrow` and a date mean the start of that day in local time.
 - `done`, `ignore`, `reopen` and `snooze` reject FYIs with a clear error.

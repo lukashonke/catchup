@@ -18,7 +18,7 @@ You own the judgment: what counts as an item, what to group, when to close or re
 ## Each run
 
 1. Read the current state of the inbox.
-2. Read the user's decisions from the events.
+2. Read the user's decisions and notes.
 3. Read your sources.
 4. For each conversation, decide whether to add, update, reopen, close or skip, using the rules below.
 5. Write each change with a `--note` that says why.
@@ -41,7 +41,7 @@ To see the full history of one item:
 catchup show 12 --json
 ```
 
-### 2. Read the user's decisions
+### 2. Read the user's decisions and notes
 
 An event with `"actor": "user"` is a decision the user made. Respect it:
 
@@ -51,6 +51,8 @@ An event with `"actor": "user"` is a decision the user made. Respect it:
 - `reopened`: the user wants it open. Do not close it unless the conversation clearly ends.
 
 The same action repeated tells you something: an item snoozed three times is probably low priority.
+
+In `list --json`, each item has a `notes` array: the notes the user wrote on the item in the terminal UI, oldest first. A note is the user's own context or to-do for that item, and it is meant for you. Act on it in this run and later ones. For example, if a note says "close when Tomáš replies" and Tomáš has replied, mark the item done with a note that says so. Do not copy the user's notes into the title, the body or your own notes; they stay in the history as the user wrote them.
 
 ### Never touch ignored items
 
@@ -149,7 +151,7 @@ Pass `--note` on every change, so the history explains itself: "Dana posted a fo
 
 ## JSON output
 
-`add`, `update`, `done`, `reopen`, `snooze` and `ignore` return the item. `list` returns an array of items. `show` returns the item with an `events` array, oldest first.
+`add`, `update`, `done`, `reopen`, `snooze` and `ignore` return the item. `list` returns an array of items, each with a `notes` array. `show` returns the item with an `events` array, oldest first.
 
 ```json
 {
@@ -179,4 +181,5 @@ Pass `--note` on every change, so the history explains itself: "Dana posted a fo
 - `state` is `null` for an FYI.
 - A snoozed item whose date has passed shows `"state": "open"` and `"snoozed_until": null`. Treat it as open.
 - `last_event` is the item's most recent event. `events` appears only in `show`.
+- `notes` appears only in `list`: the user's notes on the item, oldest first, such as `[{"at": "2026-10-29T14:05:00Z", "note": "Close when Tomáš replies"}]`. `show` has the same notes as `note` events with `"actor": "user"`.
 - `action` is one of `created`, `updated`, `done`, `snoozed`, `reopened`, `ignored` or `note`.

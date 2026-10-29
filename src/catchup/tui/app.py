@@ -21,7 +21,7 @@ from catchup.opener import open_item
 from catchup.store import Item, State, Store, utc_now
 from catchup.tui import theme
 from catchup.tui.data import TABS, Snapshot, StoreThread, load
-from catchup.tui.dialogs import SnoozePicker
+from catchup.tui.dialogs import NoteEditor, SnoozePicker
 from catchup.tui.settings import Settings
 from catchup.tui.widgets import Details, ItemList, day, day_time
 from catchup.when import parse_every, parse_until
@@ -63,6 +63,7 @@ class CatchupApp(App[None]):
         Binding("ctrl+enter", "open_link", "Open the first link", show=False),
         Binding("u", "undo", "Undo", show=False),
         Binding("z", "snooze", "Snooze", show=False),
+        Binding("n", "note", "Note", show=False),
         Binding("c", "run_agent", "Catch up now", show=False),
         Binding("s", "settings", "Settings", show=False),
         Binding("q", "close", "Quit", show=False),
@@ -301,6 +302,21 @@ class CatchupApp(App[None]):
     async def _snooze_picked(self, item: Item, until: datetime | None) -> None:
         if until is not None:
             await self._change(item, lambda store, item_id: _snooze(store, item_id, until))
+
+    def action_note(self) -> None:
+        if self.item:
+            self.push_screen(NoteEditor(self.item.title), partial(self._note_written, self.item))
+
+    async def _note_written(self, item: Item, note: str | None) -> None:
+        if note is None:
+            return
+        try:
+            await self.store.run(lambda store: store.update(item.id, note=note, actor="user"))
+        except (CatchupError, sqlite3.Error) as e:
+            self.notify(str(e), title="Note not saved", severity="error", markup=False)
+            return
+        await self.reload()
+        self.notify(item.title, title="Note added", markup=False)
 
     def on_item_list_open_requested(self) -> None:
         self._open_in_claude()
