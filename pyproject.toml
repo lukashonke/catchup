@@ -1,0 +1,20 @@
+[project]
+name = "catchup"
+version = "0.1.0"
+description = "A local inbox that an AI agent fills with the things waiting on you."
+requires-python = ">=3.11"
+dependencies = [
+    "textual>=8.2.8",
+]
+
+[project.scripts]
+catchup = "catchup.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.11.1,<0.12"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]
