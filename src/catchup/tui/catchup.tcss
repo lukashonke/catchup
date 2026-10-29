@@ -174,6 +174,12 @@ Screen {
     padding: 0 2;
     background: $chrome;
     color: $dim;
+    & > #footer-keys {
+        width: 1fr;
+    }
+    & > #footer-help {
+        width: auto;
+    }
 }
 
 /* Below NARROW_COLUMNS the details pane moves below the list. */
@@ -283,7 +289,7 @@ Settings {
     }
 }
 
-SnoozePicker, NoteEditor {
+SnoozePicker, NoteEditor, KeysHelp {
     align: center middle;
     background: $chrome 60%;
 }
@@ -303,7 +309,7 @@ SnoozePicker, NoteEditor {
     & > .dialog-hint, & > .dialog-keys {
         color: $dim;
     }
-    & > .dialog-keys {
+    & > .dialog-keys, & > #keys {
         margin-top: 1;
     }
     & > OptionList {

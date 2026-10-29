@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from typing import ClassVar
 
 from rich.console import Console, ConsoleOptions, RenderResult
+from rich.measure import Measurement
 from rich.table import Table
 from rich.text import Text
 from textual.app import ComposeResult
@@ -62,6 +63,30 @@ class _Line:
             text.rstrip()
             text.append("…")
         yield text
+
+
+class KeyHints:
+    """Keys and what they do, on one line that ends with the last hint that fits whole."""
+
+    def __init__(self, keys: list[tuple[str, str]]) -> None:
+        self.keys = keys
+
+    def __rich_measure__(self, console: Console, options: ConsoleOptions) -> Measurement:
+        return Measurement(0, self._line(options.max_width).cell_len)
+
+    def __rich_console__(self, console: Console, options: ConsoleOptions) -> RenderResult:
+        yield self._line(options.max_width)
+
+    def _line(self, width: int) -> Text:
+        line = Text()
+        for key, what in self.keys:
+            hint = Text.assemble((f" {key} ", f"bold {theme.INK} on {theme.DIM}"), f" {what}")
+            gap = "  " if line else ""
+            if line.cell_len + len(gap) + hint.cell_len > width:
+                break
+            line.append(gap)
+            line.append_text(hint)
+        return line
 
 
 def _row(item: Item, now: datetime) -> Table:

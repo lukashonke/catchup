@@ -11,7 +11,7 @@ from textual.widgets import Input
 from catchup.config import Config, load_config
 from catchup.store import Kind, Link, Priority, Store, utc_now
 from catchup.tui.app import CatchupApp
-from catchup.tui.dialogs import NoteEditor, SnoozePicker
+from catchup.tui.dialogs import KeysHelp, NoteEditor, SnoozePicker
 from catchup.tui.settings import Settings
 from catchup.tui.widgets import Details, ItemList
 from catchup.when import parse_until
@@ -53,8 +53,8 @@ def ids(app: CatchupApp) -> list[str | None]:
 
 
 def text(app: CatchupApp, selector: str) -> str:
-    """The text a widget shows on screen, one line per row, without trailing spaces."""
-    widget = app.query_one(selector)
+    """The text a widget on the top screen shows, one line per row, without trailing spaces."""
+    widget = app.screen.query_one(selector)
     strips = widget.render_lines(Region(0, 0, *widget.region.size))
     return "\n".join(strip.text.rstrip() for strip in strips).strip()
 
@@ -261,7 +261,7 @@ async def test_settings_save_to_the_config_and_take_effect(
         await pilot.press("ctrl+s")
         await pilot.pause()
         assert "Open in Codex" in text(app, "#open")
-        assert "enter  Open in Codex" in text(app, "#footer")
+        assert "enter  Open in Codex" in text(app, "#footer-keys")
 
     saved = load_config()
     assert (saved.open_label, saved.agent_every, saved.agent_prompt) == (
@@ -299,7 +299,7 @@ async def test_c_starts_the_agent_run(db: Path, no_agent_runs: AsyncMock) -> Non
         await pilot.press("c")
         await app.workers.wait_for_complete()
         assert start.await_count == 1
-        assert "c  catch up now" in text(app, "#footer")
+        assert "c  catch up now" in text(app, "#footer-keys")
 
 
 async def test_u_undoes_the_latest_state_change(db: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -464,3 +464,28 @@ async def test_slash_filters_the_rows_by_title_body_and_link_label(db: Path) -> 
         await pilot.press("slash", "k", "escape")
         assert not app.query_one("#filter-bar").display and isinstance(app.focused, ItemList)
         assert len(ids(app)) == 6
+
+
+async def test_question_mark_lists_every_key_and_holds_back_the_inbox_keys(db: Path) -> None:
+    add(db, "waiting", "Answer Ken", 1)
+
+    app = CatchupApp(Config(open_label="Open in Codex"))
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        assert text(app, "#footer-help") == "?  keys"
+        await pilot.press("question_mark")
+        assert isinstance(app.screen, KeysHelp)
+        assert "enter       Open in Codex" in text(app, "#keys")
+        # Under the dialog, space does not mark the item done and q closes only the dialog.
+        await pilot.press("space", "q")
+        await app.workers.wait_for_complete()
+        assert not isinstance(app.screen, KeysHelp) and app.is_running
+        assert len(ids(app)) == 2
+
+
+async def test_narrow_footer_drops_whole_hints_and_keeps_the_help(db: Path) -> None:
+    app = CatchupApp(Config(agent_prompt="Sync my inbox."))
+    async with app.run_test(size=(90, 40)) as pilot:
+        await pilot.pause()
+        assert text(app, "#footer-keys").endswith("/  filter")
+        assert text(app, "#footer-help") == "?  keys"

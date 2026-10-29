@@ -23,9 +23,17 @@ from catchup.opener import open_item
 from catchup.store import Item, State, Store, utc_now
 from catchup.tui import theme
 from catchup.tui.data import TABS, Snapshot, StoreThread, load
-from catchup.tui.dialogs import NoteEditor, SnoozePicker
+from catchup.tui.dialogs import KeysHelp, NoteEditor, SnoozePicker
 from catchup.tui.settings import Settings
-from catchup.tui.widgets import Details, Filter, ItemList, day, day_time, matches
+from catchup.tui.widgets import (
+    Details,
+    Filter,
+    ItemList,
+    KeyHints,
+    day,
+    day_time,
+    matches,
+)
 from catchup.when import parse_every, parse_until
 
 POLL_SECONDS = 2.0
@@ -70,6 +78,7 @@ class CatchupApp(App[None]):
         Binding("slash", "filter", "Filter", show=False),
         Binding("escape", "clear_filter", "Clear the filter", show=False),
         Binding("c", "run_agent", "Catch up now", show=False),
+        Binding("question_mark", "keys", "Keys", show=False),
         Binding("s", "settings", "Settings", show=False),
         Binding("q", "close", "Quit", show=False),
         Binding("ctrl+c", "quit", "Quit", show=False, priority=True),
@@ -104,7 +113,10 @@ class CatchupApp(App[None]):
         with Horizontal(id="panes"):
             yield ItemList(id="list")
             yield Details(id="details")
-        yield Static(id="footer")
+        with Horizontal(id="footer"):
+            yield Static(id="footer-keys")
+            # Its own widget, so a narrow terminal drops the other keys and never this one.
+            yield Static(KeyHints([("?", "keys")]), id="footer-help")
 
     async def on_mount(self) -> None:
         self._show_config()
@@ -118,21 +130,15 @@ class CatchupApp(App[None]):
         """Show the parts of the screen that the settings change."""
         self.query_one("#open", Button).label = self.config.open_label
         keys = [
-            ("←→", "tab"),
             ("enter", self.config.open_label),
-            ("ctrl+enter", "link"),
             ("space", "done"),
-            ("⌫", "ignore"),
+            ("z", "snooze"),
+            ("n", "note"),
+            ("/", "filter"),
             *([("c", "catch up now")] if self.config.agent_prompt else []),
-            ("s", "settings"),
             ("q", "quit"),
         ]
-        self.query_one("#footer", Static).update(
-            Content("  ").join(
-                Content.assemble((f" {key} ", f"bold {theme.INK} on {theme.DIM}"), f" {what}")
-                for key, what in keys
-            )
-        )
+        self.query_one("#footer-keys", Static).update(KeyHints(keys))
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
         # The inbox keys act only on the inbox: not under a dialog or while typing a filter.
@@ -183,6 +189,9 @@ class CatchupApp(App[None]):
             )
         if self.is_running:
             await self.check_agent()
+
+    def action_keys(self) -> None:
+        self.push_screen(KeysHelp(self.config.open_label))
 
     def action_settings(self) -> None:
         self.push_screen(Settings(self.config), self._settings_saved)

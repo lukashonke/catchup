@@ -1,4 +1,4 @@
-"""The small dialogs over the inbox: the snooze picker and the note editor."""
+"""The small dialogs over the inbox: the snooze picker, the note editor and the keys."""
 
 from datetime import datetime
 from typing import ClassVar
@@ -105,6 +105,43 @@ class NoteEditor(ModalScreen[str | None]):
 
     def action_save(self) -> None:
         self.dismiss(self.query_one(TextArea).text.strip() or None)
+
+
+class KeysHelp(ModalScreen[None]):
+    """The list of every key, including the ones the footer has no room for."""
+
+    BINDINGS: ClassVar = [Binding("escape,question_mark,q", "dismiss", "Close", show=False)]
+
+    def __init__(self, open_label: str) -> None:
+        super().__init__()
+        self.open_label = open_label
+
+    def compose(self) -> ComposeResult:
+        keys = [
+            ("↑ ↓", "select an item"),
+            ("← →", "previous or next tab"),
+            ("enter", self.open_label),
+            ("ctrl+enter", "open the first link in the browser"),
+            ("space", "done"),
+            ("backspace", "ignore"),
+            ("z", "snooze until a time you pick"),
+            ("u", "undo the last state change"),
+            ("n", "write a note for the agent"),
+            ("/", "filter the list; esc clears the filter"),
+            ("c", "catch up now: start the agent run"),
+            ("s", "settings"),
+            ("?", "this list"),
+            ("q", "quit"),
+        ]
+        grid = Table.grid(padding=(0, 2))
+        grid.add_column(no_wrap=True, style=f"bold {theme.ACCENT}")
+        grid.add_column()
+        for key, what in keys:
+            grid.add_row(key, Text(what))
+        with Vertical(classes="dialog"):
+            yield Static("Keys", classes="dialog-title")
+            yield Static(grid, id="keys")
+            yield Static("esc close", classes="dialog-keys")
 
 
 def _choice(number: int, label: str, until: datetime) -> Table:
