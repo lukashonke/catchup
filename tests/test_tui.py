@@ -17,6 +17,16 @@ from catchup.tui.widgets import Details, ItemList
 from catchup.when import parse_until
 
 
+@pytest.fixture(autouse=True)
+def no_agent_runs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> AsyncMock:
+    """Keep every test from starting a real agent run, even with an agent prompt set."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    monkeypatch.setattr("catchup.agent.is_due", lambda config, now: False)
+    start = AsyncMock(return_value=None)
+    monkeypatch.setattr("catchup.agent.start", start)
+    return start
+
+
 @pytest.fixture
 def db(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     path = tmp_path / "catchup.db"
@@ -278,11 +288,8 @@ async def test_settings_refuse_a_bad_interval(
     assert not (tmp_path / "config").exists()
 
 
-async def test_c_starts_the_agent_run(db: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("catchup.agent.is_due", lambda config, now: False)
-    start = AsyncMock(return_value=None)
-    monkeypatch.setattr("catchup.agent.start", start)
-
+async def test_c_starts_the_agent_run(db: Path, no_agent_runs: AsyncMock) -> None:
+    start = no_agent_runs
     app = CatchupApp(Config(agent_prompt="Sync my inbox."))
     async with app.run_test(size=(140, 40)) as pilot:
         await pilot.pause()
