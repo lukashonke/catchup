@@ -282,6 +282,13 @@ Settings {
             background: $selected;
         }
     }
+    & > Checkbox {
+        background: $panel;
+        color: $foreground;
+        &:focus {
+            background: $selected;
+        }
+    }
     & > TextArea {
         border: none;
         height: 6;

@@ -8,9 +8,9 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, VerticalScroll
 from textual.screen import ModalScreen
-from textual.widgets import Button, Input, Label, Static, TextArea
+from textual.widgets import Button, Checkbox, Input, Label, Static, TextArea
 
-from catchup import CatchupError, agent
+from catchup import CatchupError, agent, todoist
 from catchup.config import Config, default_config_path, save_config, validate
 
 LOG_LINES = 300
@@ -54,6 +54,18 @@ class Settings(ModalScreen[Config | None]):
             yield Input(_join(config.agent_command), id="agent_command")
             yield Label("Run the agent every", classes="s-label")
             yield Input(config.agent_every, id="agent_every", placeholder="30m, 1h or 4h")
+            yield Label("Todoist", classes="s-label")
+            yield Static(
+                "A tab with your Todoist tasks, read through td, the Todoist CLI."
+                f" Install it with {todoist.INSTALL_COMMAND}.",
+                classes="s-hint",
+            )
+            yield Checkbox("Show the Todoist tab", config.todoist, id="todoist", compact=True)
+            yield Label("Todoist command", classes="s-label")
+            yield Input(_join(config.todoist_command), id="todoist_command")
+            yield Label("Todoist filter", classes="s-label")
+            yield Static("Which tasks the tab shows, as a Todoist filter.", classes="s-hint")
+            yield Input(config.todoist_filter, id="todoist_filter", placeholder="today | overdue")
             yield Label("Agent log", classes="s-label")
             yield Static(
                 f"The last runs, newest at the bottom. {agent.log_path()}", classes="s-hint"
@@ -81,9 +93,11 @@ class Settings(ModalScreen[Config | None]):
             "open_label": self.query_one("#open_label", Input).value,
             "agent_prompt": self.query_one("#agent_prompt", TextArea).text,
             "agent_every": self.query_one("#agent_every", Input).value.strip(),
+            "todoist": self.query_one("#todoist", Checkbox).value,
+            "todoist_filter": self.query_one("#todoist_filter", Input).value,
         }
         try:
-            for key in ("open_command", "agent_command"):
+            for key in ("open_command", "agent_command", "todoist_command"):
                 text = self.query_one(f"#{key}", Input).value
                 try:
                     argv = shlex.split(text)

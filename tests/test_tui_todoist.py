@@ -8,10 +8,10 @@ import pytest
 from conftest import StandIn, task
 from test_tui import add, text
 from textual.pilot import Pilot
-from textual.widgets import Markdown
+from textual.widgets import Checkbox, Markdown
 
 from catchup import todoist
-from catchup.config import Config
+from catchup.config import Config, load_config
 from catchup.store import Store
 from catchup.tui.app import CatchupApp
 from catchup.tui.dialogs import KeysHelp, NoteEditor, SnoozePicker
@@ -238,3 +238,16 @@ async def test_signed_out_td_asks_for_l_which_signs_in_and_loads(db: Path, td: S
     assert "auth login --json" in td.calls()
     # Signed in, L does not start another login.
     assert td.calls().count("auth login --json") == 1
+
+
+async def test_settings_turn_the_todoist_tab_on(db: Path) -> None:
+    app = CatchupApp(Config())
+    async with app.run_test(size=(140, 50)) as pilot:
+        await pilot.pause()
+        await pilot.press("s")
+        await pilot.pause()
+        app.screen.query_one("#todoist", Checkbox).value = True
+        await pilot.press("ctrl+s")
+        await pilot.pause()
+        assert text(app, "#tabs").split()[0] == "Todoist"
+    assert load_config().todoist is True
