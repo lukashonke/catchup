@@ -39,6 +39,7 @@ RED = "#e44332"
 # Todoist's priority colors in its dark theme, by p-label; p4 has none.
 PRIORITY_COLORS = {1: "#ff7066", 2: "#ff9a14", 3: "#5297ff"}
 _MARK = "●"
+_LINK_LENGTH = 40
 
 FOOTER_KEYS = [
     ("space", "complete"),
@@ -55,13 +56,13 @@ def help_keys(open_label: str) -> list[tuple[str, str]]:
     return [
         ("↑ ↓", "select a task"),
         ("← →", "previous or next tab"),
-        ("space", "complete the task; a recurring one moves to its next date"),
+        ("space", "complete the task"),
         ("enter", "open the task in Todoist"),
         ("ctrl+enter", "open the task in Todoist"),
-        ("z", "reschedule to a time you pick, keeping the recurrence"),
+        ("z", "reschedule to a time you pick"),
         ("a", f"{open_label} with the task"),
         ("R", "read the tasks from Todoist again"),
-        ("L", "sign in to Todoist, when td is signed out"),
+        ("L", "sign in, when td is signed out"),
         ("c", "catch up now: start the agent run"),
         ("s", "settings"),
         ("?", "this list"),
@@ -177,11 +178,14 @@ class TaskDetails(VerticalScroll):
         body.update(task.description)
         link = self.query_one("#t-link", Static)
         link.set_class(not task.url, "-hidden")
-        # Non-breaking spaces keep the chip on one line.
+        # Cut like the inbox's link labels; non-breaking spaces keep the chip on one line.
+        label = task.url.removeprefix("https://")
+        if len(label) > _LINK_LENGTH:
+            label = label[: _LINK_LENGTH - 1] + "…"
         link.update(
             Content.assemble(
-                (" TODOIST ", f"bold {RED} on {theme.BUTTON}"),
-                (f"{task.url} ", f"{theme.FOREGROUND} on {theme.BUTTON}"),
+                ("\u00a0TODOIST\u00a0", f"bold {RED} on {theme.BUTTON}"),
+                (f"{label}\u00a0", f"{theme.FOREGROUND} on {theme.BUTTON}"),
             ).stylize(Style.from_meta({"todoist-link": task.url}))
         )
 
@@ -367,7 +371,7 @@ class TodoistView(Vertical, can_focus=True):
             parts.append(Content.styled(" · not updated: ", theme.URGENT))
             parts.append(Content(self.error))
         if self.fetched_at and not self.problem:
-            parts.append(Content(f" · from {self.fetched_at.astimezone():%H:%M}"))
+            parts.append(Content(f" · updated {self.fetched_at.astimezone():%H:%M}"))
         self.query_one("#t-status", Static).update(Content.assemble(*parts))
 
     def _show_selected(self) -> None:

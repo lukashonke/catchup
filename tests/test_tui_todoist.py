@@ -61,13 +61,13 @@ async def test_the_tab_lists_the_tasks_by_project_inbox_first(db: Path, td: Stan
         assert lines[1].split() == ["●", "Pay", "the", "rent", "@home", "@money", "2d", "overdue"]
         assert lines[2].split() == ["Water", "the", "plants", "↻", "15:00"]
         assert lines[4].split() == ["WORK", "1"]
-        assert text(app, "#t-status").startswith("today | overdue · 3 tasks · from")
+        assert text(app, "#t-status").startswith("today | overdue · 3 tasks · updated")
 
         assert text(app, "#t-title") == "Pay the rent"
         assert text(app, "#t-meta") == "p1  · Inbox · @home @money"
         assert "2d overdue" in text(app, "#t-due")
         assert app.query_one("#t-body", Markdown).source == "Transfer **before** noon."
-        assert "https://app.todoist.com/app/task/i1" in text(app, "#t-link")
+        assert text(app, "#t-link").replace("\xa0", " ") == "TODOIST app.todoist.com/app/task/i1"
         await pilot.press("down", "down")
         assert text(app, "#t-meta") == "p3  · Work › Ops"
         await pilot.press("up")
@@ -246,7 +246,9 @@ async def test_settings_turn_the_todoist_tab_on(db: Path) -> None:
         await pilot.pause()
         await pilot.press("s")
         await pilot.pause()
-        app.screen.query_one("#todoist", Checkbox).value = True
+        # A click, so the test fails when the checkbox is hidden.
+        await pilot.click("#todoist")
+        assert app.screen.query_one("#todoist", Checkbox).value
         await pilot.press("ctrl+s")
         await pilot.pause()
         assert text(app, "#tabs").split()[0] == "Todoist"
