@@ -23,22 +23,8 @@ from catchup.when import parse_until
 REAL_IS_DUE, REAL_START = agent.is_due, agent.start
 
 
-@pytest.fixture(autouse=True)
-def no_agent_runs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Mock:
-    """Keep every test from starting a real agent run or renaming the herdr tab it runs in."""
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
-    monkeypatch.delenv("HERDR_ENV", raising=False)
-    monkeypatch.setattr("catchup.agent.is_due", lambda config, now: False)
-    start = Mock(return_value=None)
-    monkeypatch.setattr("catchup.agent.start", start)
-    return start
-
-
-@pytest.fixture
-def db(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
-    path = tmp_path / "catchup.db"
-    monkeypatch.setenv("CATCHUP_DB", str(path))
-    return path
+# The fixtures no_agent_runs and db are in conftest.py.
+pytestmark = pytest.mark.usefixtures("no_agent_runs")
 
 
 def add(

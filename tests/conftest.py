@@ -2,8 +2,28 @@ import json
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
+
+
+@pytest.fixture
+def no_agent_runs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Mock:
+    """Keep a TUI test from starting a real agent run or renaming the herdr tab it runs in."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    monkeypatch.delenv("HERDR_ENV", raising=False)
+    monkeypatch.setattr("catchup.agent.is_due", lambda config, now: False)
+    start = Mock(return_value=None)
+    monkeypatch.setattr("catchup.agent.start", start)
+    return start
+
+
+@pytest.fixture
+def db(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    path = tmp_path / "catchup.db"
+    monkeypatch.setenv("CATCHUP_DB", str(path))
+    return path
+
 
 # A stand-in for the Todoist CLI: it records each call, prints the reply set for its first two
 # arguments, or fails with the error set for them or for every call. It never reaches Todoist.
