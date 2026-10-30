@@ -26,13 +26,14 @@ from textual.widgets import Markdown, OptionList, Static
 from textual.widgets.option_list import Option
 
 from catchup import CatchupError, todoist
+from catchup.context import Context
 from catchup.links import Link
 from catchup.opener import open_item
 from catchup.store import Item, utc_now
 from catchup.todoist import Task
 from catchup.tui import theme
 from catchup.tui.dialogs import SnoozePicker
-from catchup.tui.widgets import _Line, _section
+from catchup.tui.widgets import _context_mark, _Line, _section
 
 REFRESH_SECONDS = 60.0
 RED = "#e44332"
@@ -43,7 +44,6 @@ _LINK_LENGTH = 40
 
 FOOTER_KEYS = [
     ("space", "complete"),
-    ("enter", "open in Todoist"),
     ("z", "reschedule"),
     ("R", "refresh"),
 ]
@@ -57,7 +57,7 @@ def help_keys(open_label: str, open_space_label: str) -> list[tuple[str, str]]:
         ("↑ ↓", "select a task"),
         ("← →", "previous or next tab"),
         ("space", "complete the task"),
-        ("enter", "open the task in Todoist"),
+        ("enter", "fetch the context; once it is ready, show it"),
         ("ctrl+enter", "open the task in Todoist"),
         ("z", "reschedule to a time you pick"),
         ("a", f"{open_label} with the task"),
@@ -95,7 +95,12 @@ def due_text(task: Task, now: datetime) -> tuple[str, bool]:
     return {0: "today", -1: "tomorrow"}.get(days, _day(task.due_date)), False
 
 
-def _row(task: Task, now: datetime) -> Table:
+def context_key(task: Task) -> str:
+    """Return the key of the task's context, apart from the inbox items' keys."""
+    return f"todoist-{task.id}"
+
+
+def _row(task: Task, now: datetime, context: Context | None = None, frame: str = "") -> Table:
     color = PRIORITY_COLORS.get(task.p)
     title = Text(task.title)
     if task.labels:
@@ -106,11 +111,13 @@ def _row(task: Task, now: datetime) -> Table:
     grid.add_column(ratio=1)
     grid.add_column(width=1, no_wrap=True)
     grid.add_column(width=12, no_wrap=True, justify="right")
+    grid.add_column(width=1, no_wrap=True)
     grid.add_row(
         Text(_MARK if color else "", style=color or ""),
         _Line(title),
         Text("↻" if task.recurring else "", style=theme.DIM),
         Text(due, style=theme.URGENT if overdue else theme.DIM),
+        _context_mark(None, context, frame),
     )
     return grid
 
@@ -118,18 +125,28 @@ def _row(task: Task, now: datetime) -> Table:
 class TaskList(OptionList):
     """The tasks, under a header for each project."""
 
+    def __init__(self, id: str | None = None) -> None:
+        super().__init__(id=id)
+        self.tasks: dict[str, Task] = {}
+        self.contexts: dict[str, Context] = {}
+        self.now = utc_now()
+        # The spinner frame of the rows whose context is being fetched.
+        self.frame = ""
+
     def show(self, tasks: list[Task], selected: str | None, now: datetime, empty: str) -> None:
         """Replace the rows and select `selected`, the row in its place if it is gone, else the first."""
         previous = self.highlighted
+        self.tasks = {task.id: task for task in tasks}
+        self.now = now
         options: list[Option] = []
         for index, task in enumerate(tasks):
             if index == 0 or task.project != tasks[index - 1].project:
                 if options:
                     options.append(Option(Text(""), disabled=True))
                 count = sum(other.project == task.project for other in tasks)
-                header = _section(task.project.upper(), str(count), mark=False)
-                options.append(Option(header, disabled=True))
-            options.append(Option(_row(task, now), id=task.id))
+                options.append(Option(_section(task.project.upper(), str(count)), disabled=True))
+            context = self.contexts.get(context_key(task))
+            options.append(Option(_row(task, now, context, self.frame), id=task.id))
         if not tasks:
             options.append(Option(Text(empty, style=theme.FAINT), disabled=True))
         self.set_options(options)
@@ -145,6 +162,16 @@ class TaskList(OptionList):
             self.highlighted = enabled[0]
         else:
             self.highlighted = None
+
+    def show_contexts(self, contexts: dict[str, Context], frame: str) -> None:
+        """Redraw the rows whose context mark changed, or that spin while it is fetched."""
+        for task_id, task in self.tasks.items():
+            key = context_key(task)
+            before, after = self.contexts.get(key), contexts.get(key)
+            if before != after or (after and after.state == "fetching"):
+                self.replace_option_prompt(task_id, _row(task, self.now, after, frame))
+        self.contexts = contexts
+        self.frame = frame
 
 
 class TaskDetails(VerticalScroll):
@@ -210,7 +237,8 @@ class TodoistView(Vertical, can_focus=True):
     BINDINGS: ClassVar = [
         Binding("space", "complete", "Complete", show=False),
         # Before the list's own Enter, which would select the row.
-        Binding("enter,ctrl+enter", "browse", "Open in Todoist", show=False, priority=True),
+        Binding("enter", "context", "Context", show=False, priority=True),
+        Binding("ctrl+enter", "browse", "Open in Todoist", show=False),
         Binding("z", "reschedule", "Reschedule", show=False),
         Binding("a", "claude", "Open in Claude", show=False),
         Binding("A,shift+a,ctrl+a", "claude(True)", "Open in Claude in a new space", show=False),
@@ -400,12 +428,20 @@ class TodoistView(Vertical, can_focus=True):
         # The task keys act only while the tab shows tasks, and L only while signed out.
         if action == "login":
             return self.problem == "signed-out" and not self.signing_in
-        if action in ("complete", "browse", "reschedule", "claude"):
+        if action in ("complete", "context", "browse", "reschedule", "claude"):
             return self.selected is not None and self._setup() is None
         return True
 
     def action_refresh(self) -> None:
         self.refresh_tasks()
+
+    def action_context(self) -> None:
+        if task := self.selected:
+            self.app.open_context(context_key(task), as_item(task))
+
+    def show_contexts(self, contexts: dict[str, Context], frame: str) -> None:
+        """Show the context marks of the tasks."""
+        self.query_one(TaskList).show_contexts(contexts, frame)
 
     def action_browse(self) -> None:
         if self.selected and self.selected.url:

@@ -10,11 +10,11 @@ from test_tui import add, text
 from textual.pilot import Pilot
 from textual.widgets import Checkbox, Markdown
 
-from catchup import todoist
+from catchup import context, todoist
 from catchup.config import Config, load_config
-from catchup.store import Store
+from catchup.store import Store, utc_now
 from catchup.tui.app import CatchupApp
-from catchup.tui.dialogs import KeysHelp, NoteEditor, SnoozePicker
+from catchup.tui.dialogs import ContextView, KeysHelp, NoteEditor, SnoozePicker
 from catchup.tui.todoist import TaskList, TodoistView
 
 pytestmark = pytest.mark.usefixtures("no_agent_runs")
@@ -162,7 +162,7 @@ async def test_z_reschedules_keeping_the_time_of_a_timed_task(db: Path, td: Stan
     ]
 
 
-async def test_enter_opens_the_task_in_todoist_and_a_opens_it_in_claude(
+async def test_ctrl_enter_opens_the_task_in_todoist_and_a_opens_it_in_claude(
     db: Path, td: StandIn, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     open_item = AsyncMock()
@@ -172,8 +172,8 @@ async def test_enter_opens_the_task_in_todoist_and_a_opens_it_in_claude(
         opened: list[str] = []
         monkeypatch.setattr(app, "open_url", opened.append)
         await todoist_tab(app, pilot)
-        await pilot.press("enter", "ctrl+enter")
-        assert opened == ["https://app.todoist.com/app/task/i1"] * 2
+        await pilot.press("ctrl+enter")
+        assert opened == ["https://app.todoist.com/app/task/i1"]
         await pilot.press("a")
         await settle(app, pilot)
         await pilot.press("A")
@@ -185,6 +185,38 @@ async def test_enter_opens_the_task_in_todoist_and_a_opens_it_in_claude(
         "Pay the rent\n\nTransfer **before** noon.\n\n"
         "Todoist task: https://app.todoist.com/app/task/i1\n\nHelp me handle this."
     )
+
+
+async def test_enter_fetches_the_context_of_the_task_then_shows_it(
+    db: Path, td: StandIn, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fetched: list[tuple[str, str, list[object]]] = []
+    contexts: dict[str, context.Context] = {}
+    monkeypatch.setattr(
+        "catchup.context.fetch",
+        lambda key, item, notes, config: fetched.append((key, item.prompt, notes)),
+    )
+    monkeypatch.setattr("catchup.context.read_all", lambda: dict(contexts))
+    app = CatchupApp(Config(todoist=True, todoist_command=td.command))
+    async with app.run_test(size=(140, 40)) as pilot:
+        await todoist_tab(app, pilot)
+        await pilot.press("enter")
+        await app.workers.wait_for_complete()
+        [(key, prompt, notes)] = fetched
+        assert (key, notes) == ("todoist-i1", [])
+        assert prompt.startswith("Pay the rent\n\nTransfer **before** noon.")
+
+        contexts[key] = context.Context(key, "ready", utc_now(), "## The rent\n\nDue today.")
+        await pilot.pause(2.5)  # The next poll reads it.
+        lines = text(app, "#t-list").splitlines()
+        assert lines[1].endswith("◆")
+        # The project count lines up with the due dates, left of the mark.
+        assert lines[4].split() == ["WORK", "1"]
+        assert len(lines[4]) == lines[5].index("today") + len("today")
+        await pilot.press("enter")
+        await pilot.pause()
+        assert isinstance(app.screen, ContextView)
+        assert app.screen.query_one("#c-body", Markdown).source.startswith("## The rent")
 
 
 async def test_inbox_keys_do_nothing_on_the_todoist_tab(db: Path, td: StandIn) -> None:
@@ -200,7 +232,7 @@ async def test_inbox_keys_do_nothing_on_the_todoist_tab(db: Path, td: StandIn) -
         assert not isinstance(app.screen, NoteEditor)
         assert not app.query_one("#filter-bar").display
         assert rows(app) == [None, "i1", "i2", None, None, "w1"]
-        assert text(app, "#footer-keys").startswith("space  complete   enter  open in Todoist")
+        assert text(app, "#footer-keys").startswith("enter  context   a  Open in Claude")
         await pilot.press("question_mark")
         assert isinstance(app.screen, KeysHelp)
         assert "reschedule to a time you pick" in text(app, "#keys")

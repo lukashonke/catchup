@@ -115,7 +115,7 @@ class CatchupApp(App[None]):
         self._poll_error: str | None = None
         self.agent_state = agent.RunState(started_at=None, running=False)
         self._spin = 0
-        self.contexts: dict[int, context.Context] = {}
+        self.contexts: dict[str, context.Context] = {}
         # The items as they were before each state change made in this session, latest last.
         self._undo: list[Item] = []
         # The new item that counts as seen when its timer fires, unless the selection moves first.
@@ -166,7 +166,13 @@ class CatchupApp(App[None]):
             ("q", "quit"),
         ]
         if self.tab == TODOIST:
-            keys = [*TODOIST_KEYS, ("a", self.config.open_label), ("A", "new space"), ("q", "quit")]
+            keys = [
+                ("enter", "context"),
+                ("a", self.config.open_label),
+                ("A", "new space"),
+                *TODOIST_KEYS,
+                ("q", "quit"),
+            ]
         self.query_one("#footer-keys", Static).update(KeyHints(keys))
         if self.snapshot:
             self._show_header(self.snapshot)
@@ -381,7 +387,9 @@ class CatchupApp(App[None]):
             self._show_contexts()
 
     def _show_contexts(self) -> None:
-        self.query_one(ItemList).show_contexts(self.contexts, SPINNER[self._spin % len(SPINNER)])
+        frame = SPINNER[self._spin % len(SPINNER)]
+        self.query_one(ItemList).show_contexts(self.contexts, frame)
+        self.query_one(TodoistView).show_contexts(self.contexts, frame)
 
     def _read_contexts(self) -> None:
         try:
@@ -548,26 +556,29 @@ class CatchupApp(App[None]):
         self.notify(item.title, title="Note added", markup=False)
 
     def on_item_list_open_requested(self) -> None:
-        item = self.item
-        if item is None:
-            return
-        found = self.contexts.get(item.id)
+        if self.item:
+            self.open_context(str(self.item.id), self.item)
+
+    def open_context(self, key: str, item: Item) -> None:
+        """Fetch the context kept under `key` for `item`, or show it once it is fetched."""
+        found = self.contexts.get(key)
         if found is None:
-            self._fetch_context(item)
+            self._fetch_context(key, item)
         elif found.state == "fetching":
             self.notify("Still fetching the context.", title=item.title, markup=False)
         else:
-            self.push_screen(ContextView(item, found), partial(self._context_closed, item))
+            self.push_screen(ContextView(item, found), partial(self._context_closed, key, item))
 
-    def _context_closed(self, item: Item, choice: str | None) -> None:
+    def _context_closed(self, key: str, item: Item, choice: str | None) -> None:
         if choice == "fetch":
-            self._fetch_context(item)
+            self._fetch_context(key, item)
 
     @work(group="context")
-    async def _fetch_context(self, item: Item) -> None:
+    async def _fetch_context(self, key: str, item: Item) -> None:
         try:
-            history = await self.store.run(lambda store: store.history(item.id))
-            started = context.fetch(item, history, self.config)
+            # A Todoist task is no inbox item, so it has no notes.
+            notes = await self.store.run(lambda store: store.history(item.id)) if item.id else []
+            started = context.fetch(key, item, notes, self.config)
         except (CatchupError, OSError, sqlite3.Error) as e:
             self.notify(str(e), title="Cannot fetch the context", severity="error", markup=False)
             return
