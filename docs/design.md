@@ -13,6 +13,7 @@ The words used here are defined in [GLOSSARY.md](../GLOSSARY.md).
 - **The agent owns judgment, catchup owns state.** Catchup does not deduplicate, group or close items on its own. It records every change as an event, so the agent can read what you did ("you snoozed this twice") on its next run.
 - **Snooze expiry is computed on read.** A snoozed item whose date has passed counts as open. No background job exists.
 - **FYIs have no state.** They are a feed. Old FYIs are not deleted; they move down as new ones arrive.
+- **Todoist through its CLI.** The Todoist tab calls `td`, the Todoist CLI, rather than the Todoist API, so catchup stores no token and has no sign-in of its own: td keeps the token in the system's credential store. A Todoist task is not an item. Catchup keeps no events for it, and the agent does not see it.
 - **Opening an item runs a configurable command.** Item data reaches the command only through environment variables, never through a shell string. The prompt text comes from messages written by other people, and pasting it into a shell string would let a message run commands on your machine.
 
 ## Data
@@ -91,6 +92,10 @@ open_label = "Open in Codex"
 agent_prompt = "Use the catchup-inbox skill to sync my inbox with Slack and email."
 agent_command = ["claude", "-p", "--permission-mode", "auto"]
 agent_every = "1h"
+# The Todoist tab; it is off by default. The command is the Todoist CLI.
+todoist = true
+todoist_command = ["td"]
+todoist_filter = "today | overdue"
 ```
 
 The settings screen in the TUI edits the same file. It writes only keys that differ from the default and keeps comments and unknown keys.
@@ -110,7 +115,7 @@ If an item has no prompt, catchup sends a default one: the title, the body, the 
 The TUI is a two-pane view:
 
 - **Header**: the name, the number of open waiting items, urgent items and new items, and the time of the agent's last event. With an agent run configured, it also shows a spinner and the start time while the run goes on, a failed or stopped last run, and when the next run is due.
-- **State tabs**: Open, Snoozed, Done, Ignored, each with a count.
+- **State tabs**: Open, Snoozed, Done, Ignored, each with a count. With `todoist = true`, a red Todoist tab comes first, set apart by a divider. The TUI still starts on Open.
 - **Filter bar**, above the list while a filter is set.
 - **List**, on the left. On the Open tab it shows a "Waiting on you" section first, sorted by priority and then oldest first. Below it is the FYI feed, newest first, in dimmer text. Each row shows a dot for a new item or an arrow for an opened one, a priority marker (`!` urgent, `↓` low), the title, the type of the main link, and the age. The age turns yellow after 3 days and red after 7.
 - **Details**, on the right: the title, the state, when it was first seen and last opened, the body, the links as clickable chips with their type, the buttons, the prompt that "Open in Claude" will send, and the history, including your notes.
@@ -140,3 +145,19 @@ The mouse and the up and down keys select items. The keys:
 The inbox keys do nothing while a dialog is open or while you type in the filter bar. Ctrl+C always quits.
 
 The snooze picker offers 3 hours, tomorrow, in 3 days, next Monday and in a week, on the keys 1 to 5, each with the moment it resolves to. Tab moves to a field that takes any value `snooze --until` accepts. Esc cancels.
+
+### Todoist tab
+
+The Todoist tab lists the tasks that `td task list --filter <todoist_filter> --all` returns, grouped by project. Every task has a project; a task without one is in the Inbox project, which comes first, and the other projects follow in Todoist's order. Within a project the oldest due date comes first, then the higher priority, then the earlier time. Todoist's API numbers priorities the other way round from its labels: 4 is p1. td lists sections one project at a time, so the tab asks only for the projects whose tasks have one.
+
+On the tab, Space completes the task, Enter and Ctrl+Enter open it in the Todoist web app, z reschedules it, `a` opens it in Claude, R reads the list again and L signs td in. The inbox keys that change items (Backspace, n, u) and the filter (/) do nothing there.
+
+`todoist.json` next to the database keeps the last list td returned, so the tab shows it at once, also right after the TUI starts. A new list is read in the background when you switch to the tab, every 60 seconds while it is shown, after each action, and on R. A read never clears the list: when it fails, the line above the list says why and the cached list stays.
+
+An action changes the row at once, then td carries it out, and then the tab reads the list again, which puts a row back if the action failed. A read that runs while an action is still on its way to Todoist may predate it, so the tab drops that read and waits for the one after the action.
+
+Rescheduling uses the snooze picker. A pick within a day that is not a midnight, such as 3 hours, becomes that date and time. Any other pick becomes its day, and a task due at a time of day keeps that time. `td task reschedule` keeps the recurrence.
+
+`a` opens the task through the same open command as an item. Its prompt holds the title, the description and the link to the task. A task has no item id, so `CATCHUP_ID` is 0.
+
+When `td` is not on the `PATH`, the tab says how to install it and loads once it is there. When td is signed out (it reports the error code `NO_TOKEN`, or `AUTH_ERROR` when Todoist rejects its token), the tab asks you to press L, which runs `td auth login` in the background. td opens the browser and waits for the sign-in on a local port; the tab loads the tasks when it ends.

@@ -127,10 +127,26 @@ agent_every = "1h"  # the default; 30m, 1h, 4h, ...
 
 The agent reads messages that other people wrote, so a message can try to talk it into doing something else. The default command uses Claude Code's auto mode, which checks each action before it runs. Do not use `--dangerously-skip-permissions` here.
 
+## Todoist
+
+Catchup can show your Todoist tasks in a tab left of the inbox tabs. It reads and changes them through `td`, the [Todoist CLI](https://github.com/Doist/todoist-cli), so catchup never holds your Todoist token. The tab is off by default. Turn it on in the settings (`s`), or in `~/.config/catchup/config.toml`:
+
+```toml
+todoist = true
+todoist_command = ["td"]  # the default
+todoist_filter = "today | overdue"  # the default; any Todoist filter
+```
+
+- The tab lists the tasks that match the filter, grouped by project, with the Inbox first. Each row shows the priority in Todoist's colors, the title, the labels, ↻ for a recurring task, and the due date, red when overdue. The details show the description, the project and section, the due date with its recurrence, and the link to the task.
+- Space completes the task; a recurring task moves on to its next date. z reschedules it with the snooze picker and keeps its recurrence. Enter opens it in Todoist. `a` opens it in Claude, with a prompt made of the title, the description and the link. R reads the tasks again. Backspace, n and u do nothing on this tab.
+- The tab shows the last list at once, also right after the UI starts. It reads a new one in the background when you open the tab, every minute while the tab is shown, and after each action. The line above the list says when the list was updated, or why it was not.
+- To set it up, install td with `npm install -g @doist/todoist-cli`. Until td is on the `PATH`, the tab shows how to install it. If td is signed out, press L on the tab: td opens your browser to sign in and keeps the token in the system's credential store.
+
 ## Where the data lives
 
 - Database: `$CATCHUP_DB` if set, else `$XDG_DATA_HOME/catchup/catchup.db`, else `~/.local/share/catchup/catchup.db`. It is a SQLite file. Change it only through the `catchup` CLI or the UI.
 - Config: `$XDG_CONFIG_HOME/catchup/config.toml`, else `~/.config/catchup/config.toml`. It is optional.
+- The last Todoist task list: `todoist.json` next to the database.
 
 To try catchup without touching your inbox, point `CATCHUP_DB` at a scratch file:
 
