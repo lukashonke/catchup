@@ -121,7 +121,9 @@ agent_every = "1h"  # the default; 30m, 1h, 4h, ...
 - The UI reads the file again when it changes, so the next run uses your edits without a restart.
 - The command runs in your home directory, in the background, with the prompt on stdin. It keeps running when you close the UI.
 - When the interval has passed since the last start, the UI starts the next run. Press `c` (catch up now) to start one now. If several UIs are open, only one of them starts each run.
-- The header shows when the agent runs and when the next run is due. The output of the last run is in `agent.log` next to the database.
+- The header shows a spinner while the agent runs, and when the next run is due.
+- A run that takes longer than 30 minutes is stopped. Time while the computer sleeps does not count. A failed or stopped run shows in the header until the next run starts.
+- Every run is logged to `agent.log` next to the database, with a line where it starts and one where it ends. Settings (`s`) show the end of the log.
 
 The agent reads messages that other people wrote, so a message can try to talk it into doing something else. The default command uses Claude Code's auto mode, which checks each action before it runs. Do not use `--dangerously-skip-permissions` here.
 
