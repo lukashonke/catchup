@@ -43,6 +43,14 @@ class Settings(ModalScreen[Config | None]):
                 classes="s-hint",
             )
             yield Input(_join(config.open_command), id="open_command")
+            yield Label("New space action name", classes="s-label")
+            yield Input(config.open_space_label, id="open_space_label")
+            yield Label("New space command", classes="s-label")
+            yield Static(
+                "The same, for A and ctrl+a. Empty opens a new herdr space inside herdr.",
+                classes="s-hint",
+            )
+            yield Input(_join(config.open_space_command), id="open_space_command")
             yield Label("Agent prompt", classes="s-label")
             yield Static(
                 "What the agent run is told to do. Empty turns the agent run off.",
@@ -79,11 +87,12 @@ class Settings(ModalScreen[Config | None]):
     def action_save(self) -> None:
         data: dict[str, object] = {
             "open_label": self.query_one("#open_label", Input).value,
+            "open_space_label": self.query_one("#open_space_label", Input).value,
             "agent_prompt": self.query_one("#agent_prompt", TextArea).text,
             "agent_every": self.query_one("#agent_every", Input).value.strip(),
         }
         try:
-            for key in ("open_command", "agent_command"):
+            for key in ("open_command", "open_space_command", "agent_command"):
                 text = self.query_one(f"#{key}", Input).value
                 try:
                     argv = shlex.split(text)
