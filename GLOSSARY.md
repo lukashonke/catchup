@@ -72,7 +72,7 @@ _Avoid_: Comment, memo
 An item you opened in a coding agent, which means you started working on it. It does not mean the item is handled.
 
 **Context**:
-Background on one item, fetched on request by a quick separate agent run and shown full screen: what the item is about, the messages that matter, what is needed from you, and the current state of its links. It can go out of date when the agent later changes the item.
+Background on one item or Todoist task, fetched on request by a quick separate agent run and shown full screen: what the item is about, the messages that matter, what is needed from you, and the current state of its links. It can go out of date when the agent later changes the item.
 _Avoid_: Summary, details, preview
 
 **Todoist task**:

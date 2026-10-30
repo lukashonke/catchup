@@ -109,7 +109,7 @@ When `new-window` gets the command as more than one argument, tmux runs it direc
 
 ## Context
 
-Enter on an item fetches its context in the background: a quick separate agent run reads the item's sources and summarizes what you need to catch up on it. While it runs, the row shows a spinner; when it is ready, a ◆. Enter on that row shows the context full screen, where `r` fetches it again and `y` copies it. A ◇ means the agent changed the item after the fetch, so the context may be out of date. A ✕ means the fetch failed; Enter shows why.
+Enter on an item, or on a Todoist task, fetches its context in the background: a quick separate agent run reads the item's sources and summarizes what you need to catch up on it. While it runs, the row shows a spinner; when it is ready, a ◆. Enter on that row shows the context full screen, where `r` fetches it again and `y` copies it. A ◇ means the agent changed the item after the fetch, so the context may be out of date. A ✕ means the fetch failed; Enter shows why.
 
 ```toml
 context_command = ["claude", "-p", "--model", "haiku", "--permission-mode", "auto"]  # the default
@@ -153,7 +153,7 @@ todoist_filter = "today | overdue"  # the default; any Todoist filter
 ```
 
 - The tab lists the tasks that match the filter, grouped by project, with the Inbox first. Each row shows the priority in Todoist's colors, the title, the labels, ↻ for a recurring task, and the due date, red when overdue. The details show the description, the project and section, the due date with its recurrence, and the link to the task.
-- Space completes the task; a recurring task moves on to its next date. z reschedules it with the snooze picker and keeps its recurrence. Enter opens it in Todoist. `a` opens it in Claude, with a prompt made of the title, the description and the link, and A or Ctrl+A does the same in a new space. R reads the tasks again. Backspace, n and u do nothing on this tab.
+- Space completes the task; a recurring task moves on to its next date. z reschedules it with the snooze picker and keeps its recurrence. Enter fetches its context, as on an item (see [Context](#context)), and Ctrl+Enter opens it in Todoist. `a` opens it in Claude, with a prompt made of the title, the description and the link, and A or Ctrl+A does the same in a new space. R reads the tasks again. Backspace, n and u do nothing on this tab.
 - The tab shows the last list at once, also right after the UI starts. It reads a new one in the background when you open the tab, every minute while the tab is shown, and after each action. The line above the list says when the list was updated, or why it was not.
 - To set it up, install td with `npm install -g @doist/todoist-cli`. Until td is on the `PATH`, the tab shows how to install it. If td is signed out, press L on the tab: td opens your browser to sign in and keeps the token in the system's credential store.
 
