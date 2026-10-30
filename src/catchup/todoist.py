@@ -71,22 +71,22 @@ async def fetch(command: Sequence[str], query: str) -> dict[str, Any]:
     The result is the raw JSON that `parse` reads and the cache keeps.
     """
     tasks, projects = await asyncio.gather(
-        _json(command, "task", "list", "--filter", query, "--json", "--all"),
-        _json(command, "project", "list", "--json", "--all", "--full"),
+        _results(command, "task", "list", "--filter", query, "--json", "--all"),
+        _results(command, "project", "list", "--json", "--all", "--full"),
     )
     # td lists sections one project at a time, so ask only for the projects that need them.
-    sectioned = sorted({t["projectId"] for t in tasks["results"] if t.get("sectionId")})
+    sectioned = sorted({str(t.get("projectId")) for t in tasks if t.get("sectionId")})
     sections = await asyncio.gather(
         *(
-            _json(command, "section", "list", "--project", f"id:{p}", "--json", "--all")
+            _results(command, "section", "list", "--project", f"id:{p}", "--json", "--all")
             for p in sectioned
         )
     )
     return {
         "fetched_at": datetime.now(UTC).isoformat(),
-        "tasks": tasks["results"],
-        "projects": projects["results"],
-        "sections": [section for listed in sections for section in listed["results"]],
+        "tasks": tasks,
+        "projects": projects,
+        "sections": [section for listed in sections for section in listed],
     }
 
 
@@ -108,7 +108,7 @@ def parse(raw: dict[str, Any]) -> Tasks:
             due = (task.due_date or date.max, -task.priority, task.due_time or time.max)
             keyed.append(((group, *due, order), task))
         fetched_at = datetime.fromisoformat(raw["fetched_at"])
-    except (KeyError, TypeError, ValueError) as e:
+    except (KeyError, TypeError, ValueError, AttributeError) as e:
         raise CatchupError(
             f"cannot read the Todoist tasks: {e!r}; press R to load them again"
         ) from e
@@ -198,14 +198,19 @@ def write_cache(raw: dict[str, Any]) -> None:
     temporary.replace(path)
 
 
-async def _json(command: Sequence[str], *args: str) -> dict[str, Any]:
+async def _results(command: Sequence[str], *args: str) -> list[dict[str, Any]]:
+    """Return the list that a td list command prints as JSON with --all."""
     output = await _run(command, *args)
     try:
-        return json.loads(output)
-    except ValueError:
-        raise CatchupError(
-            f"td {args[0]} {args[1]} printed no JSON; check that {command[0]} is the Todoist CLI"
-        ) from None
+        results = json.loads(output)["results"]
+        if isinstance(results, list) and all(isinstance(r, dict) for r in results):
+            return results
+    except (ValueError, KeyError, TypeError):
+        pass
+    raise CatchupError(
+        f"td {args[0]} {args[1]} printed no list of results; check that {command[0]}"
+        " is the Todoist CLI"
+    )
 
 
 async def _run(command: Sequence[str], *args: str) -> str:

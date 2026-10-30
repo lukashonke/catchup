@@ -253,3 +253,18 @@ async def test_settings_turn_the_todoist_tab_on(db: Path) -> None:
         await pilot.pause()
         assert text(app, "#tabs").split()[0] == "Todoist"
     assert load_config().todoist is True
+
+
+async def test_l_works_when_td_signs_out_while_the_list_shows(db: Path, td: StandIn) -> None:
+    app = CatchupApp(Config(todoist=True, todoist_command=td.command))
+    async with app.run_test(size=(140, 40)) as pilot:
+        await todoist_tab(app, pilot)
+        td.fail("all", "AUTH_ERROR", "Unauthorized")
+        await pilot.press("R")
+        await settle(app, pilot)
+        assert "Press L to sign in." in text(app, "#t-setup")
+        td.heal("all")
+        await pilot.press("L")
+        await settle(app, pilot)
+        assert rows(app)[1] == "i1"
+    assert "auth login --json" in td.calls()

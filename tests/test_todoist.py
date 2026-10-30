@@ -43,6 +43,12 @@ async def test_fetch_tells_signed_out_from_other_failures(td: StandIn) -> None:
         await todoist.fetch(td.command, "today")
 
 
+async def test_output_that_is_not_a_td_list_is_an_error(td: StandIn) -> None:
+    (td.directory / "project-list.out").write_text('{"results": "none"}')
+    with pytest.raises(CatchupError, match="td project list printed no list of results"):
+        await todoist.fetch(td.command, "today")
+
+
 async def test_a_missing_td_says_how_to_install_it(tmp_path: Path) -> None:
     with pytest.raises(todoist.NotInstalled, match="npm install -g @doist/todoist-cli"):
         await todoist.complete((str(tmp_path / "td"),), "i1")
