@@ -12,6 +12,7 @@ from catchup import CatchupError
 from catchup.when import parse_every
 
 DEFAULT_AGENT_COMMAND = ("claude", "-p", "--permission-mode", "auto")
+DEFAULT_TODOIST_COMMAND = ("td",)
 
 
 @dataclass(frozen=True)
@@ -24,6 +25,10 @@ class Config:
     agent_prompt: str | None = None
     agent_command: tuple[str, ...] = DEFAULT_AGENT_COMMAND
     agent_every: str = "1h"
+    # The Todoist tab is off by default, as it needs the Todoist CLI.
+    todoist: bool = False
+    todoist_command: tuple[str, ...] = DEFAULT_TODOIST_COMMAND
+    todoist_filter: str = "today | overdue"
 
 
 def default_config_path() -> Path:
@@ -75,12 +80,30 @@ def validate(data: dict[str, Any], path: Path) -> Config:
         parse_every(every)
     except CatchupError as e:
         raise CatchupError(f"agent_every in {path}: {e}") from None
+    todoist = data.get("todoist", Config.todoist)
+    if not isinstance(todoist, bool):
+        raise CatchupError(f"todoist in {path} must be true or false")
+    todoist_command = data.get("todoist_command", list(DEFAULT_TODOIST_COMMAND))
+    if not _is_argv(todoist_command):
+        raise CatchupError(
+            f"todoist_command in {path} must be a non-empty list of strings,"
+            ' for example todoist_command = ["td"]'
+        )
+    todoist_filter = data.get("todoist_filter", Config.todoist_filter)
+    if not (isinstance(todoist_filter, str) and todoist_filter.strip()):
+        raise CatchupError(
+            f"todoist_filter in {path} must be a non-empty Todoist filter,"
+            ' for example todoist_filter = "today | overdue"'
+        )
     return Config(
         open_command=command,
         open_label=label.strip(),
         agent_prompt=(prompt or "").strip() or None,
         agent_command=tuple(agent_command),
         agent_every=every,
+        todoist=todoist,
+        todoist_command=tuple(todoist_command),
+        todoist_filter=todoist_filter.strip(),
     )
 
 

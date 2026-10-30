@@ -70,6 +70,9 @@ def test_reads_the_agent_settings(tmp_path: Path) -> None:
         ('agent_every = "1d"', "agent_every .* cannot read '1d' as an interval"),
         ("agent_command = []", "agent_command .* non-empty list of strings"),
         ("agent_prompt = 3", "agent_prompt .* must be a string"),
+        ('todoist = "yes"', "todoist .* must be true or false"),
+        ('todoist_command = "td"', "todoist_command .* non-empty list of strings"),
+        ('todoist_filter = " "', "todoist_filter .* non-empty Todoist filter"),
     ],
 )
 def test_rejects_bad_agent_settings(tmp_path: Path, toml: str, message: str) -> None:
@@ -77,6 +80,18 @@ def test_rejects_bad_agent_settings(tmp_path: Path, toml: str, message: str) -> 
     path.write_text(toml)
     with pytest.raises(CatchupError, match=message):
         load_config(path)
+
+
+def test_reads_the_todoist_settings(tmp_path: Path) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text('todoist = true\ntodoist_command = ["/bin/td"]\ntodoist_filter = "today"\n')
+    config = load_config(path)
+    assert (config.todoist, config.todoist_command, config.todoist_filter) == (
+        True,
+        ("/bin/td",),
+        "today",
+    )
+    assert load_config(tmp_path / "missing.toml").todoist is False
 
 
 def test_save_keeps_comments_and_leaves_defaults_out(tmp_path: Path) -> None:
