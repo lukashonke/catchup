@@ -19,14 +19,14 @@ from textual.style import Style
 from textual.timer import Timer
 from textual.widgets import Button, Input, OptionList, Static
 
-from catchup import CatchupError, agent
+from catchup import CatchupError, agent, context
 from catchup.config import Config, default_config_path, load_config
 from catchup.herdr import TabTitle
 from catchup.opener import open_item
 from catchup.store import Item, State, Store, utc_now
 from catchup.tui import theme
 from catchup.tui.data import TABS, Snapshot, StoreThread, load
-from catchup.tui.dialogs import KeysHelp, NoteEditor, SnoozePicker
+from catchup.tui.dialogs import ContextView, KeysHelp, NoteEditor, SnoozePicker
 from catchup.tui.settings import Settings
 from catchup.tui.widgets import (
     Details,
@@ -108,6 +108,7 @@ class CatchupApp(App[None]):
         self._poll_error: str | None = None
         self.agent_state = agent.RunState(started_at=None, running=False)
         self._spin = 0
+        self.contexts: dict[int, context.Context] = {}
         # The items as they were before each state change made in this session, latest last.
         self._undo: list[Item] = []
         # The new item that counts as seen when its timer fires, unless the selection moves first.
@@ -133,6 +134,8 @@ class CatchupApp(App[None]):
     async def on_mount(self) -> None:
         self._show_config()
         self.query_one(ItemList).focus()
+        # Before the first poll, or Enter would fetch a context that is ready.
+        self._read_contexts()
         await self.reload()
         self.set_interval(POLL_SECONDS, self.poll)
         self.set_interval(AGENT_CHECK_SECONDS, self.check_agent)
@@ -143,6 +146,7 @@ class CatchupApp(App[None]):
         """Show the parts of the screen that the settings change."""
         self.query_one("#open", Button).label = self.config.open_label
         keys = [
+            ("enter", "context"),
             ("a", self.config.open_label),
             ("A", "new space"),
             ("space", "done"),
@@ -252,7 +256,8 @@ class CatchupApp(App[None]):
         self.store.close()
 
     async def poll(self) -> None:
-        """Reload when the database changed or a minute passed."""
+        """Reload when the database changed or a minute passed, and show fetched contexts."""
+        self._read_contexts()
         try:
             event_id = await self.store.run(Store.last_event_id)
             if (event_id, utc_now().minute) != self._poll_key:
@@ -335,9 +340,26 @@ class CatchupApp(App[None]):
         self.query_one("#last-run", Static).update(status)
 
     def _spin_agent(self) -> None:
-        if self.agent_state.running:
+        fetching = any(c.state == "fetching" for c in self.contexts.values())
+        if self.agent_state.running or fetching:
             self._spin += 1
+        if self.agent_state.running:
             self._show_agent()
+        if fetching:
+            self._show_contexts()
+
+    def _show_contexts(self) -> None:
+        self.query_one(ItemList).show_contexts(self.contexts, SPINNER[self._spin % len(SPINNER)])
+
+    def _read_contexts(self) -> None:
+        try:
+            contexts = context.read_all()
+        except OSError as e:
+            contexts = {}
+            self.notify(str(e), title="Cannot read the contexts", severity="error", markup=False)
+        if contexts != self.contexts:
+            self.contexts = contexts
+            self._show_contexts()
 
     @work(group="herdr", exclusive=True)
     async def _show_tab_title(self, counts: str) -> None:
@@ -473,7 +495,32 @@ class CatchupApp(App[None]):
         self.notify(item.title, title="Note added", markup=False)
 
     def on_item_list_open_requested(self) -> None:
-        self._open_in_claude()
+        item = self.item
+        if item is None:
+            return
+        found = self.contexts.get(item.id)
+        if found is None:
+            self._fetch_context(item)
+        elif found.state == "fetching":
+            self.notify("Still fetching the context.", title=item.title, markup=False)
+        else:
+            self.push_screen(ContextView(item, found), partial(self._context_closed, item))
+
+    def _context_closed(self, item: Item, choice: str | None) -> None:
+        if choice == "fetch":
+            self._fetch_context(item)
+
+    @work(group="context")
+    async def _fetch_context(self, item: Item) -> None:
+        try:
+            history = await self.store.run(lambda store: store.history(item.id))
+            started = context.fetch(item, history, self.config)
+        except (CatchupError, OSError, sqlite3.Error) as e:
+            self.notify(str(e), title="Cannot fetch the context", severity="error", markup=False)
+            return
+        if started:
+            self.notify(item.title, title="Fetching the context", markup=False)
+        self._read_contexts()
 
     def action_open(self, space: bool = False) -> None:
         self._open_in_claude(space)

@@ -1,5 +1,7 @@
-"""The small dialogs over the inbox: the snooze picker, the note editor and the keys."""
+"""The dialogs over the inbox: the snooze picker, the note editor, the keys and the context."""
 
+import shutil
+import subprocess
 from datetime import datetime
 from typing import ClassVar
 
@@ -7,14 +9,15 @@ from rich.table import Table
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Vertical
+from textual.containers import Vertical, VerticalScroll
 from textual.content import Content
 from textual.screen import ModalScreen
-from textual.widgets import Input, OptionList, Static, TextArea
+from textual.widgets import Input, Markdown, OptionList, Static, TextArea
 from textual.widgets.option_list import Option
 
 from catchup import CatchupError
-from catchup.store import utc_now
+from catchup.context import Context
+from catchup.store import Item, utc_now
 from catchup.tui import theme
 from catchup.tui.widgets import day_time
 from catchup.when import parse_until
@@ -121,7 +124,7 @@ class KeysHelp(ModalScreen[None]):
         keys = [
             ("↑ ↓", "select an item"),
             ("← →", "previous or next tab"),
-            ("enter", self.open_label),
+            ("enter", "fetch the context; once it is ready, show it full screen"),
             ("a", self.open_label),
             ("A, ctrl+a", self.open_space_label),
             ("ctrl+enter", "open the first link in the browser"),
@@ -145,6 +148,50 @@ class KeysHelp(ModalScreen[None]):
             yield Static("Keys", classes="dialog-title")
             yield Static(grid, id="keys")
             yield Static("esc close", classes="dialog-keys")
+
+
+class ContextView(ModalScreen[str | None]):
+    """An item's context, full screen; dismiss with "fetch" to fetch it again, else None."""
+
+    BINDINGS: ClassVar = [
+        Binding("escape,q,enter", "dismiss(None)", "Close", show=False),
+        Binding("r", "dismiss('fetch')", "Fetch again", show=False),
+        Binding("y", "copy", "Copy", show=False),
+    ]
+
+    def __init__(self, item: Item, context: Context) -> None:
+        super().__init__()
+        self.item = item
+        self.context = context
+
+    def compose(self) -> ComposeResult:
+        context = self.context
+        when = f"fetched {day_time(context.started_at)}"
+        if context.state == "failed":
+            meta = Content.assemble(("the fetch failed", theme.URGENT), f" · {when}")
+        elif context.stale(self.item):
+            meta = Content.assemble(
+                (when, theme.DIM), ("  · the agent changed the item since", theme.ACCENT)
+            )
+        else:
+            meta = Content(when)
+        with VerticalScroll(id="context"):
+            yield Static(Content(self.item.title), id="c-title")
+            yield Static(meta, id="c-meta")
+            # Fetched from other people's messages, so a failure shows as text, not as Markdown.
+            if context.state == "failed":
+                yield Static(Content(context.text), id="c-error")
+            else:
+                yield Markdown(context.text, id="c-body")
+        yield Static("esc close · r fetch again · y copy", id="c-keys")
+
+    def action_copy(self) -> None:
+        # Terminals and multiplexers often drop the escape code copy_to_clipboard() sends.
+        if shutil.which("pbcopy"):
+            subprocess.run(["pbcopy"], input=self.context.text.encode(), check=False)
+        else:
+            self.app.copy_to_clipboard(self.context.text)
+        self.notify("The context is on the clipboard.", markup=False)
 
 
 def _choice(number: int, label: str, until: datetime) -> Table:

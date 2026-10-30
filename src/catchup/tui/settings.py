@@ -62,6 +62,17 @@ class Settings(ModalScreen[Config | None]):
             yield Input(_join(config.agent_command), id="agent_command")
             yield Label("Run the agent every", classes="s-label")
             yield Input(config.agent_every, id="agent_every", placeholder="30m, 1h or 4h")
+            yield Label("Context prompt", classes="s-label")
+            yield Static(
+                "What enter asks for an item's context. The item follows it.", classes="s-hint"
+            )
+            yield TextArea(config.context_prompt, id="context_prompt", soft_wrap=True)
+            yield Label("Context command", classes="s-label")
+            yield Static(
+                "Runs in your home directory with the prompt on stdin; prints the context.",
+                classes="s-hint",
+            )
+            yield Input(_join(config.context_command), id="context_command")
             yield Label("Agent log", classes="s-label")
             yield Static(
                 f"The last runs, newest at the bottom. {agent.log_path()}", classes="s-hint"
@@ -91,8 +102,11 @@ class Settings(ModalScreen[Config | None]):
             "agent_prompt": self.query_one("#agent_prompt", TextArea).text,
             "agent_every": self.query_one("#agent_every", Input).value.strip(),
         }
+        # An empty prompt falls back to the default, as a missing key does.
+        if prompt := self.query_one("#context_prompt", TextArea).text.strip():
+            data["context_prompt"] = prompt
         try:
-            for key in ("open_command", "open_space_command", "agent_command"):
+            for key in ("open_command", "open_space_command", "agent_command", "context_command"):
                 text = self.query_one(f"#{key}", Input).value
                 try:
                     argv = shlex.split(text)

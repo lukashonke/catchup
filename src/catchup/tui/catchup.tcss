@@ -357,3 +357,46 @@ SnoozePicker, NoteEditor, KeysHelp {
         height: 8;
     }
 }
+
+ContextView {
+    background: $background;
+    & > #context {
+        padding: 1 2;
+        scrollbar-size-vertical: 1;
+        scrollbar-color: $line;
+        & > #c-title {
+            color: $bright;
+            text-style: bold;
+        }
+        & > #c-meta {
+            color: $dim;
+            margin-bottom: 1;
+        }
+        & > #c-title, & > #c-meta, & > #c-body, & > #c-error {
+            /* Long lines are hard to read on a wide terminal. */
+            max-width: 100;
+        }
+        & > #c-body {
+            margin: 0;
+            padding: 0;
+            background: $background;
+            & MarkdownParagraph {
+                margin: 0 0 1 0;
+            }
+            & MarkdownHeader {
+                margin: 1 0 1 0;
+                color: $bright;
+            }
+            & > MarkdownHeader:first-child {
+                margin-top: 0;
+            }
+        }
+    }
+    & > #c-keys {
+        dock: bottom;
+        height: 1;
+        padding: 0 2;
+        background: $chrome;
+        color: $dim;
+    }
+}
