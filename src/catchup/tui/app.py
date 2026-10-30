@@ -20,7 +20,7 @@ from textual.timer import Timer
 from textual.widgets import Button, Input, OptionList, Static
 
 from catchup import CatchupError, agent
-from catchup.config import Config
+from catchup.config import Config, default_config_path, load_config
 from catchup.herdr import TabTitle
 from catchup.opener import open_item
 from catchup.store import Item, State, Store, utc_now
@@ -94,6 +94,7 @@ class CatchupApp(App[None]):
         self.register_theme(theme.THEME)
         self.theme = theme.THEME.name
         self.config = config
+        self._config_mtime = _config_mtime()
         self.store = StoreThread()
         self.tab: State = "open"
         self.snapshot: Snapshot | None = None
@@ -156,8 +157,23 @@ class CatchupApp(App[None]):
     def action_close(self) -> None:
         self.exit()
 
+    def _reload_config(self) -> None:
+        """Take in edits made to config.toml outside the app, so the next run gets them."""
+        mtime = _config_mtime()
+        if mtime is None or mtime == self._config_mtime:
+            return
+        # Set first, so a broken file is reported once and not on every check.
+        self._config_mtime = mtime
+        try:
+            self.config = load_config()
+        except CatchupError as e:
+            self.notify(str(e), title="Settings not reloaded", severity="error", markup=False)
+            return
+        self._show_config()
+
     async def check_agent(self) -> None:
         """Start the agent run when it is due, and show whether it runs."""
+        self._reload_config()
         try:
             if agent.is_due(self.config, utc_now()):
                 self._run_agent()
@@ -176,6 +192,7 @@ class CatchupApp(App[None]):
     # or the finished agent stays a zombie that reads as still running.
     @work(group="agent")
     async def _run_agent(self) -> None:
+        self._reload_config()
         try:
             process = agent.start(self.config, utc_now())
         except (CatchupError, OSError) as e:
@@ -488,6 +505,13 @@ class CatchupApp(App[None]):
             return
         if self.is_running:
             await self.reload()
+
+
+def _config_mtime() -> int | None:
+    try:
+        return default_config_path().stat().st_mtime_ns
+    except FileNotFoundError:
+        return None
 
 
 def _snooze(store: Store, item_id: int, until: datetime) -> Item:

@@ -1,4 +1,5 @@
 import asyncio
+import os
 import subprocess
 from collections.abc import Callable, Sequence
 from datetime import timedelta
@@ -316,6 +317,24 @@ async def test_c_starts_the_agent_run(db: Path, no_agent_runs: Mock) -> None:
         await app.workers.wait_for_complete()
         assert start.call_count == 1
         assert "c  catch up now" in text(app, "#footer-keys")
+
+
+async def test_a_run_gets_the_config_as_edited_outside_the_app(
+    db: Path, no_agent_runs: Mock, tmp_path: Path
+) -> None:
+    path = tmp_path / "config" / "catchup" / "config.toml"
+    path.parent.mkdir(parents=True)
+    path.write_text('agent_prompt = "Old prompt."\n', encoding="utf-8")
+    app = CatchupApp(load_config())
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        path.write_text('agent_prompt = "New prompt."\n', encoding="utf-8")
+        # Coarse file clocks can give both writes the same time.
+        stat = path.stat()
+        os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000))
+        await pilot.press("c")
+        await app.workers.wait_for_complete()
+    assert no_agent_runs.call_args.args[0].agent_prompt == "New prompt."
 
 
 async def test_u_undoes_the_latest_state_change(db: Path, monkeypatch: pytest.MonkeyPatch) -> None:
