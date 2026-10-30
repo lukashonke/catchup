@@ -99,6 +99,8 @@ class Item:
     # Whether the agent changed the item since the user last saw it.
     new: bool
     last_event: Event | None
+    # When the agent last created, reopened or updated the item.
+    agent_changed_at: datetime | None = None
 
 
 def default_db_path() -> Path:
@@ -361,6 +363,8 @@ class Store:
                    e.action AS e_action, e.note AS e_note,
                    (SELECT max(at) FROM events WHERE item_id = i.id AND action = 'opened')
                        AS opened_at,
+                   (SELECT max(at) FROM events WHERE item_id = i.id AND actor = 'agent'
+                        AND action IN ('created', 'reopened', 'updated')) AS agent_changed_at,
                    {_IS_NEW} AS is_new
             FROM items i
             LEFT JOIN events e ON e.id = (SELECT max(id) FROM events WHERE item_id = i.id)
@@ -486,4 +490,5 @@ def _item(row: sqlite3.Row) -> Item:
         opened_at=_dt(row["opened_at"]) if row["opened_at"] else None,
         new=bool(row["is_new"]),
         last_event=last_event,
+        agent_changed_at=_dt(row["agent_changed_at"]) if row["agent_changed_at"] else None,
     )
