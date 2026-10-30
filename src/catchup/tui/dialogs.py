@@ -112,15 +112,18 @@ class KeysHelp(ModalScreen[None]):
 
     BINDINGS: ClassVar = [Binding("escape,question_mark,q", "dismiss", "Close", show=False)]
 
-    def __init__(self, open_label: str) -> None:
+    def __init__(self, open_label: str, open_space_label: str) -> None:
         super().__init__()
         self.open_label = open_label
+        self.open_space_label = open_space_label
 
     def compose(self) -> ComposeResult:
         keys = [
             ("↑ ↓", "select an item"),
             ("← →", "previous or next tab"),
             ("enter", self.open_label),
+            ("a", self.open_label),
+            ("A, ctrl+a", self.open_space_label),
             ("ctrl+enter", "open the first link in the browser"),
             ("space", "done"),
             ("backspace", "ignore"),

@@ -79,6 +79,8 @@ class CatchupApp(App[None]):
         Binding("space", "change('done')", "Done", show=False),
         Binding("backspace", "change('ignore')", "Ignore", show=False),
         Binding("ctrl+enter", "open_link", "Open the first link", show=False),
+        Binding("a", "open", "Open in Claude", show=False),
+        Binding("A,shift+a,ctrl+a", "open(True)", "Open in Claude in a new space", show=False),
         Binding("u", "undo", "Undo", show=False),
         Binding("z", "snooze", "Snooze", show=False),
         Binding("n", "note", "Note", show=False),
@@ -141,7 +143,8 @@ class CatchupApp(App[None]):
         """Show the parts of the screen that the settings change."""
         self.query_one("#open", Button).label = self.config.open_label
         keys = [
-            ("enter", self.config.open_label),
+            ("a", self.config.open_label),
+            ("A", "new space"),
             ("space", "done"),
             ("backspace", "ignore"),
             ("z", "snooze"),
@@ -227,7 +230,7 @@ class CatchupApp(App[None]):
             await self.check_agent()
 
     def action_keys(self) -> None:
-        self.push_screen(KeysHelp(self.config.open_label))
+        self.push_screen(KeysHelp(self.config.open_label, self.config.open_space_label))
 
     def action_settings(self) -> None:
         self.push_screen(Settings(self.config), self._settings_saved)
@@ -472,6 +475,9 @@ class CatchupApp(App[None]):
     def on_item_list_open_requested(self) -> None:
         self._open_in_claude()
 
+    def action_open(self, space: bool = False) -> None:
+        self._open_in_claude(space)
+
     async def on_button_pressed(self, event: Button.Pressed) -> None:
         self.query_one(ItemList).focus()
         if self.item is None:
@@ -512,15 +518,15 @@ class CatchupApp(App[None]):
         self.notify(before.title, title="Undone", markup=False)
 
     @work(group="open")
-    async def _open_in_claude(self) -> None:
+    async def _open_in_claude(self, space: bool = False) -> None:
         item = self.item
         if item is None:
             return
         # Titles and errors quote other people's messages, so they are never read as markup.
-        label = self.config.open_label
+        label = self.config.open_space_label if space else self.config.open_label
         self.notify(item.title, title=label, markup=False)
         try:
-            await open_item(item, self.config)
+            await open_item(item, self.config, space=space)
         except CatchupError as e:
             self.notify(str(e), title=f"{label} failed", severity="error", timeout=12, markup=False)
             return

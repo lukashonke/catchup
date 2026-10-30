@@ -278,7 +278,7 @@ async def test_settings_save_to_the_config_and_take_effect(
         await pilot.press("ctrl+s")
         await pilot.pause()
         assert "Open in Codex" in text(app, "#open")
-        assert "enter  Open in Codex" in text(app, "#footer-keys")
+        assert "a  Open in Codex" in text(app, "#footer-keys")
 
     saved = load_config()
     assert (saved.open_label, saved.agent_every, saved.agent_prompt) == (
@@ -308,7 +308,7 @@ async def test_settings_refuse_a_bad_interval(
 async def test_c_starts_the_agent_run(db: Path, no_agent_runs: Mock) -> None:
     start = no_agent_runs
     app = CatchupApp(Config(agent_prompt="Sync my inbox."))
-    async with app.run_test(size=(140, 40)) as pilot:
+    async with app.run_test(size=(200, 40)) as pilot:
         await pilot.pause()
         await pilot.press("r")
         await app.workers.wait_for_complete()
@@ -522,7 +522,7 @@ async def test_narrow_footer_drops_whole_hints_and_keeps_the_help(db: Path) -> N
     app = CatchupApp(Config(agent_prompt="Sync my inbox."))
     async with app.run_test(size=(90, 40)) as pilot:
         await pilot.pause()
-        assert text(app, "#footer-keys").endswith("backspace  ignore")
+        assert text(app, "#footer-keys").endswith("space  done")
         assert text(app, "#footer-help") == "s  settings   ?  keys"
 
 
@@ -632,3 +632,18 @@ async def test_settings_show_the_end_of_the_agent_log(db: Path) -> None:
         log = app.screen.query_one("#agent_log", TextArea)
         assert log.read_only
         assert log.text.splitlines() == [f"line {n}" for n in range(200, 500)]
+
+
+@pytest.mark.parametrize("key", ["a", "A", "ctrl+a"])
+async def test_a_opens_in_a_tab_and_capital_a_or_ctrl_a_in_a_new_space(
+    db: Path, monkeypatch: pytest.MonkeyPatch, key: str
+) -> None:
+    add(db, "waiting", "Answer Ken", 1)
+    opened = AsyncMock()
+    monkeypatch.setattr("catchup.tui.app.open_item", opened)
+    app = CatchupApp(Config())
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        await pilot.press(key)
+        await app.workers.wait_for_complete()
+    assert opened.call_args.kwargs == {"space": key != "a"}
