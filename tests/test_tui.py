@@ -91,6 +91,8 @@ async def test_done_moves_the_item_to_the_done_tab_as_a_user_event(db: Path) -> 
 
     app = CatchupApp(Config())
     async with app.run_test(size=(140, 40)) as pilot:
+        # The details pane, and with it the button, shows once its worker read the history.
+        await app.workers.wait_for_complete()
         await pilot.pause()
         await pilot.click("#done")
         await app.workers.wait_for_complete()
