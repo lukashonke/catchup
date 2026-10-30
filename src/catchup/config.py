@@ -12,6 +12,12 @@ from catchup import CatchupError
 from catchup.when import parse_every
 
 DEFAULT_AGENT_COMMAND = ("claude", "-p", "--permission-mode", "auto")
+DEFAULT_CONTEXT_COMMAND = ("claude", "-p", "--model", "haiku", "--permission-mode", "auto")
+DEFAULT_CONTEXT_PROMPT = (
+    "Fetch any relevant context for this item from the connected tools and MCPs, and summarize"
+    " it. The goal is to catch the user up on this one item. Only read: do not post, send or"
+    " change anything. Reply with the summary in Markdown and nothing else."
+)
 
 
 @dataclass(frozen=True)
@@ -26,6 +32,8 @@ class Config:
     agent_prompt: str | None = None
     agent_command: tuple[str, ...] = DEFAULT_AGENT_COMMAND
     agent_every: str = "1h"
+    context_prompt: str = DEFAULT_CONTEXT_PROMPT
+    context_command: tuple[str, ...] = DEFAULT_CONTEXT_COMMAND
 
 
 def default_config_path() -> Path:
@@ -63,6 +71,15 @@ def validate(data: dict[str, Any], path: Path) -> Config:
             f"agent_command in {path} must be a non-empty list of strings,"
             ' for example agent_command = ["claude", "-p", "--permission-mode", "auto"]'
         )
+    context_prompt = data.get("context_prompt", DEFAULT_CONTEXT_PROMPT)
+    if not (isinstance(context_prompt, str) and context_prompt.strip()):
+        raise CatchupError(f"context_prompt in {path} must be a non-empty string")
+    context_command = data.get("context_command", list(DEFAULT_CONTEXT_COMMAND))
+    if not _is_argv(context_command):
+        raise CatchupError(
+            f"context_command in {path} must be a non-empty list of strings,"
+            ' for example context_command = ["claude", "-p", "--model", "haiku"]'
+        )
     every = data.get("agent_every", Config.agent_every)
     if not isinstance(every, str):
         raise CatchupError(f'agent_every in {path} must be a string such as "1h"')
@@ -78,6 +95,8 @@ def validate(data: dict[str, Any], path: Path) -> Config:
         agent_prompt=(prompt or "").strip() or None,
         agent_command=tuple(agent_command),
         agent_every=every,
+        context_prompt=context_prompt.strip(),
+        context_command=tuple(context_command),
     )
 
 
