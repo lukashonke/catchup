@@ -1,10 +1,11 @@
 """Contexts: background on one item, fetched on request by a quick separate agent run.
 
-Each item has at most one context, kept as a file in `contexts/` next to the database rather
-than in the database, since it is a disposable cache and not part of the item's history. Like the
-agent run, a fetch runs under a supervisor (`python -m catchup.context`) in its own session, so it
-outlives the TUI: the supervisor stops a fetch past TIME_LIMIT, then writes the answer, or why
-there is none, into the file. A lock around the files keeps that write after the TUI's own.
+Each item and each Todoist task has at most one context, kept as a file in `contexts/` next to
+the database and named by its key: the item id, or `todoist-` and the task id. It is a file, not
+a row, since it is a disposable cache and not part of the item's history. Like the agent run, a
+fetch runs under a supervisor (`python -m catchup.context`) in its own session, so it outlives
+the TUI: the supervisor stops a fetch past TIME_LIMIT, then writes the answer, or why there is
+none, into the file. A lock around the files keeps that write after the TUI's own.
 """
 
 import fcntl
@@ -39,9 +40,9 @@ ContextState = Literal["fetching", "ready", "failed"]
 
 @dataclass(frozen=True)
 class Context:
-    """The context of one item: being fetched, ready to read, or failed with the reason."""
+    """The context of one item or task: being fetched, ready to read, or failed with the reason."""
 
-    item_id: int
+    key: str
     state: ContextState
     started_at: datetime
     # The Markdown answer when ready, the reason when failed, empty while fetching.
@@ -64,27 +65,34 @@ def log_path() -> Path:
     return default_db_path().parent / "context.log"
 
 
-def read_all() -> dict[int, Context]:
-    """Return the context of every item that has one, by item id."""
+def read_all() -> dict[str, Context]:
+    """Return every context, by key."""
     with _locked() as directory:
         contexts = (_read(path) for path in directory.glob("*.json"))
-        return {context.item_id: context for context in contexts if context}
+        return {context.key: context for context in contexts if context}
 
 
 def fetch(
-    item: Item, notes: Sequence[Event], config: Config, environ: Mapping[str, str] = os.environ
+    key: str,
+    item: Item,
+    notes: Sequence[Event],
+    config: Config,
+    environ: Mapping[str, str] = os.environ,
 ) -> bool:
-    """Start fetching the item's context; return False when a fetch for it already runs.
+    """Start fetching the context of `item`, kept under `key`; return False when one already runs.
 
     Raise CatchupError when MAX_FETCHES already run or the command cannot start.
     """
+    # The key names a file, and a task id comes from Todoist.
+    if not key.replace("-", "").isalnum():
+        raise CatchupError(f"cannot keep a context under {key!r}")
     command = config.context_command
     if not shutil.which(command[0], path=environ.get("PATH")):
         raise CatchupError(f"cannot run {command[0]}: command not found")
     # Nothing here awaits, as in agent.start(): the lock is a blocking flock.
     with _locked() as directory:
         fetching = [c for c in map(_read, directory.glob("*.json")) if c and c.state == "fetching"]
-        if any(context.item_id == item.id for context in fetching):
+        if any(context.key == key for context in fetching):
             return False
         if len(fetching) >= MAX_FETCHES:
             raise CatchupError(
@@ -96,7 +104,7 @@ def fetch(
             try:
                 process = subprocess.Popen(
                     # -I: the home directory, the cwd, must not shadow the catchup package.
-                    [sys.executable, "-I", "-m", "catchup.context", str(item.id), *command],
+                    [sys.executable, "-I", "-m", "catchup.context", key, *command],
                     cwd=Path.home(),
                     env=dict(environ),
                     stdin=prompt,
@@ -107,7 +115,7 @@ def fetch(
                 )
             except OSError as e:
                 raise CatchupError(f"cannot run {command[0]}: {e.strerror or e}") from e
-        _write(directory, item.id, {"state": "fetching", "pid": process.pid})
+        _write(directory, key, {"state": "fetching", "pid": process.pid})
     return True
 
 
@@ -123,11 +131,11 @@ def prompt_for(item: Item, notes: Sequence[Event], config: Config) -> str:
     return "\n\n".join(parts)
 
 
-def supervise(item_id: int, argv: list[str], limit: timedelta = TIME_LIMIT) -> int:
+def supervise(key: str, argv: list[str], limit: timedelta = TIME_LIMIT) -> int:
     """Run the fetch, stop it past `limit`, store the answer or the reason, return the exit code."""
     started = utc_now()
     with tempfile.TemporaryFile() as out, log_path().open("a", encoding="utf-8") as log:
-        print(f"--- {stamp()} item {item_id} started", file=log, flush=True)
+        print(f"--- {stamp()} {key} started", file=log, flush=True)
         # Its own process group, so stopping it also stops the tools it started.
         child = subprocess.Popen(argv, stdout=out, stderr=log, start_new_session=True)
         signal.signal(signal.SIGTERM, lambda *_: stop_group(child.pid, signal.SIGTERM))
@@ -155,12 +163,12 @@ def supervise(item_id: int, argv: list[str], limit: timedelta = TIME_LIMIT) -> i
             tail = "\n".join(text.splitlines()[-_ERROR_LINES:])
             record = {"state": "failed", "text": f"{reason} The log is in {log_path()}.\n\n{tail}"}
         ending = record["state"] if code is not None else "stopped: it ran too long"
-        print(f"--- {stamp()} item {item_id} {ending}", file=log, flush=True)
+        print(f"--- {stamp()} {key} {ending}", file=log, flush=True)
     with _locked() as directory:
-        path = directory / f"{item_id}.json"
+        path = directory / f"{key}.json"
         # Only the fetch this supervisor started, not a later one that replaced it.
         if _raw(path).get("pid") == os.getpid():
-            _write(directory, item_id, {**record, "started_at": started.isoformat()})
+            _write(directory, key, {**record, "started_at": started.isoformat()})
     return 1 if code is None else code
 
 
@@ -173,11 +181,11 @@ def _locked() -> Iterator[Path]:
         yield directory
 
 
-def _write(directory: Path, item_id: int, data: dict[str, object]) -> None:
+def _write(directory: Path, key: str, data: dict[str, object]) -> None:
     data = {"started_at": utc_now().isoformat(), **data}
-    temporary = directory / f"{item_id}.json.tmp"
+    temporary = directory / f"{key}.json.tmp"
     temporary.write_text(json.dumps(data), encoding="utf-8")
-    temporary.replace(directory / f"{item_id}.json")
+    temporary.replace(directory / f"{key}.json")
 
 
 def _raw(path: Path) -> dict[str, object]:
@@ -191,15 +199,15 @@ def _raw(path: Path) -> dict[str, object]:
 def _read(path: Path) -> Context | None:
     data = _raw(path)
     try:
-        item_id, state = int(path.stem), data["state"]
+        state = data["state"]
         started_at = datetime.fromisoformat(str(data["started_at"])).astimezone(UTC)
     except (ValueError, KeyError):
         return None
     if state == "fetching" and not process_alive(int(data.get("pid") or 0)):
         # The supervisor ended without writing an answer, for example when it was killed.
-        return Context(item_id, "failed", started_at, f"The fetch stopped. See {log_path()}.")
-    return Context(item_id, state, started_at, str(data.get("text") or ""))
+        return Context(path.stem, "failed", started_at, f"The fetch stopped. See {log_path()}.")
+    return Context(path.stem, state, started_at, str(data.get("text") or ""))
 
 
 if __name__ == "__main__":
-    sys.exit(supervise(int(sys.argv[1]), sys.argv[2:]))
+    sys.exit(supervise(sys.argv[1], sys.argv[2:]))

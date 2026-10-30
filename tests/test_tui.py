@@ -640,12 +640,10 @@ async def test_a_opens_in_a_tab_and_capital_a_or_ctrl_a_in_a_new_space(
 async def test_enter_fetches_the_context_then_shows_it_full_screen(
     db: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    item_id = int(add(db, "waiting", "Answer Ken", 1))
-    fetched: list[int] = []
-    contexts: dict[int, context.Context] = {}
-    monkeypatch.setattr(
-        "catchup.context.fetch", lambda item, notes, config: fetched.append(item.id)
-    )
+    item_id = add(db, "waiting", "Answer Ken", 1)
+    fetched: list[str] = []
+    contexts: dict[str, context.Context] = {}
+    monkeypatch.setattr("catchup.context.fetch", lambda key, *_: fetched.append(key))
     monkeypatch.setattr("catchup.context.read_all", lambda: dict(contexts))
     app = CatchupApp(Config())
     async with app.run_test(size=(140, 40)) as pilot:

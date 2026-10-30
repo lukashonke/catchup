@@ -90,14 +90,15 @@ class KeyHints:
         return line
 
 
-def _context_mark(item: Item, context: Context | None, frame: str) -> Text:
+def _context_mark(item: Item | None, context: Context | None, frame: str) -> Text:
+    """Return the mark of a row's context; a row without `item` has no agent to change it."""
     if context is None:
         return Text("")
     if context.state == "fetching":
         return Text(frame, style=theme.ACCENT)
     if context.state == "failed":
         return Text("✕", style=theme.URGENT)
-    if context.stale(item):
+    if item and context.stale(item):
         return Text("◇", style=theme.DIM)
     return Text("◆", style=theme.ACCENT)
 
@@ -134,16 +135,13 @@ def _row(item: Item, now: datetime, context: Context | None = None, frame: str =
     return grid
 
 
-def _section(left: str, right: str, mark: bool = True) -> Table:
+def _section(left: str, right: str) -> Table:
     grid = Table.grid(expand=True)
     grid.add_column(ratio=1)
     grid.add_column(justify="right")
-    cells = [Text(left, style=f"bold {theme.DIM}"), Text(right, style=theme.DIM)]
     # Room for the rows' context mark, so the count lines up with their ages.
-    if mark:
-        grid.add_column(width=2)
-        cells.append(Text(""))
-    grid.add_row(*cells)
+    grid.add_column(width=2)
+    grid.add_row(Text(left, style=f"bold {theme.DIM}"), Text(right, style=theme.DIM), Text(""))
     return grid
 
 
@@ -157,7 +155,7 @@ class ItemList(OptionList):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self.contexts: dict[int, Context] = {}
+        self.contexts: dict[str, Context] = {}
         self.items: dict[int, Item] = {}
         self.now = utc_now()
         # The spinner frame of the rows whose context is being fetched.
@@ -201,17 +199,18 @@ class ItemList(OptionList):
         else:
             self.highlighted = None
 
-    def show_contexts(self, contexts: dict[int, Context], frame: str) -> None:
+    def show_contexts(self, contexts: dict[str, Context], frame: str) -> None:
         """Redraw the rows whose context mark changed, or that spin while it is fetched."""
         for item_id, item in self.items.items():
-            before, after = self.contexts.get(item_id), contexts.get(item_id)
+            key = str(item_id)
+            before, after = self.contexts.get(key), contexts.get(key)
             if before != after or (after and after.state == "fetching"):
-                self.replace_option_prompt(str(item_id), _row(item, self.now, after, frame))
+                self.replace_option_prompt(key, _row(item, self.now, after, frame))
         self.contexts = contexts
         self.frame = frame
 
     def _row(self, item: Item) -> Table:
-        return _row(item, self.now, self.contexts.get(item.id), self.frame)
+        return _row(item, self.now, self.contexts.get(str(item.id)), self.frame)
 
     @property
     def selected_id(self) -> int | None:
