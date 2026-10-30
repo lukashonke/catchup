@@ -99,6 +99,8 @@ The settings screen in the TUI edits the same file. It writes only keys that dif
 
 The TUI starts the agent run, so a user needs no separate scheduler. A run is a background process in its own session, so it outlives the TUI. `agent.json` next to the database holds the process id and start time of the last run, and `agent.lock` serializes reading and writing it, so of several open TUIs only one starts each run. A run is due when the interval has passed since the last start and the last process is gone.
 
+A supervisor process (`python -m catchup.agent`) runs the command, rather than the TUI waiting on it, because the run outlives the TUI. The supervisor enforces the time limit, writes the exit code into `agent.json` when the run ends, and writes a start line and an end line into `agent.log`. Any TUI, including one opened after the run ended, can then show that the run failed. The time limit runs on a clock that stops while the computer sleeps, so a run frozen overnight is not stopped when the lid opens. Stopping the supervisor with SIGTERM also stops the run, and its exit code still gets recorded.
+
 If `open_command` is not set and the TUI runs inside herdr (`HERDR_ENV=1`), catchup uses its bundled herdr opener. That opener creates a herdr tab in the current workspace, labeled with the item title, in the home directory, and starts Claude in it with the prompt. Outside herdr with no config, the button tells you how to set `open_command`.
 
 If an item has no prompt, catchup sends a default one: the title, the body, the link URLs, and "Help me handle this."
@@ -107,7 +109,7 @@ If an item has no prompt, catchup sends a default one: the title, the body, the 
 
 The TUI is a two-pane view:
 
-- **Header**: the name, the number of open waiting items, urgent items and new items, and the time of the agent's last event. With an agent run configured, it also shows when the run started while it runs, and else when the next run is due.
+- **Header**: the name, the number of open waiting items, urgent items and new items, and the time of the agent's last event. With an agent run configured, it also shows a spinner and the start time while the run goes on, a failed or stopped last run, and when the next run is due.
 - **State tabs**: Open, Snoozed, Done, Ignored, each with a count.
 - **Filter bar**, above the list while a filter is set.
 - **List**, on the left. On the Open tab it shows a "Waiting on you" section first, sorted by priority and then oldest first. Below it is the FYI feed, newest first, in dimmer text. Each row shows a dot for a new item or an arrow for an opened one, a priority marker (`!` urgent, `↓` low), the title, the type of the main link, and the age. The age turns yellow after 3 days and red after 7.
