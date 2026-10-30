@@ -174,8 +174,10 @@ async def test_enter_opens_the_task_in_todoist_and_a_opens_it_in_claude(
         assert opened == ["https://app.todoist.com/app/task/i1"] * 2
         await pilot.press("a")
         await settle(app, pilot)
-    assert open_item.await_args is not None
-    item = open_item.await_args.args[0]
+        await pilot.press("A")
+        await settle(app, pilot)
+    assert [call.kwargs["space"] for call in open_item.await_args_list] == [False, True]
+    item = open_item.await_args_list[0].args[0]
     assert item.title == "Pay the rent"
     assert item.prompt == (
         "Pay the rent\n\nTransfer **before** noon.\n\n"

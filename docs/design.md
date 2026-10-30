@@ -161,7 +161,7 @@ The snooze picker offers 3 hours, tomorrow, in 3 days, next Monday and in a week
 
 The Todoist tab lists the tasks that `td task list --filter <todoist_filter> --all` returns, grouped by project. Every task has a project; a task without one is in the Inbox project, which comes first, and the other projects follow in Todoist's order. Within a project the oldest due date comes first, then the higher priority, then the earlier time. Todoist's API numbers priorities the other way round from its labels: 4 is p1. td lists sections one project at a time, so the tab asks only for the projects whose tasks have one.
 
-On the tab, Space completes the task, Enter and Ctrl+Enter open it in the Todoist web app, z reschedules it, `a` opens it in Claude, R reads the list again and L signs td in. The inbox keys that change items (Backspace, n, u) and the filter (/) do nothing there.
+On the tab, Space completes the task, Enter and Ctrl+Enter open it in the Todoist web app, z reschedules it, `a` opens it in Claude (A or Ctrl+A in a new space), R reads the list again and L signs td in. The inbox keys that change items (Backspace, n, u) and the filter (/) do nothing there.
 
 `todoist.json` next to the database keeps the last list td returned, so the tab shows it at once, also right after the TUI starts. A new list is read in the background when you switch to the tab, every 60 seconds while it is shown, after each action, and on R. A read never clears the list: when it fails, the line above the list says why and the cached list stays.
 
@@ -169,6 +169,6 @@ An action changes the row at once, then td carries it out, and then the tab read
 
 Rescheduling uses the snooze picker. A pick within a day that is not a midnight, such as 3 hours, becomes that date and time. Any other pick becomes its day, and a task due at a time of day keeps that time. `td task reschedule` keeps the recurrence.
 
-`a` opens the task through the same open command as an item. Its prompt holds the title, the description and the link to the task. A task has no item id, so `CATCHUP_ID` is 0.
+`a`, A and Ctrl+A open the task through the same open commands as an item. Its prompt holds the title, the description and the link to the task. A task has no item id, so `CATCHUP_ID` is 0.
 
 When `td` is not on the `PATH`, the tab says how to install it and loads once it is there. When td is signed out (it reports the error code `NO_TOKEN`, or `AUTH_ERROR` when Todoist rejects its token), the tab asks you to press L, which runs `td auth login` in the background. td opens the browser and waits for the sign-in on a local port; the tab loads the tasks when it ends.

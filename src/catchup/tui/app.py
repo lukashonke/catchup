@@ -166,7 +166,7 @@ class CatchupApp(App[None]):
             ("q", "quit"),
         ]
         if self.tab == TODOIST:
-            keys = [*TODOIST_KEYS, ("a", self.config.open_label), ("q", "quit")]
+            keys = [*TODOIST_KEYS, ("a", self.config.open_label), ("A", "new space"), ("q", "quit")]
         self.query_one("#footer-keys", Static).update(KeyHints(keys))
         if self.snapshot:
             self._show_header(self.snapshot)
@@ -250,7 +250,10 @@ class CatchupApp(App[None]):
             await self.check_agent()
 
     def action_keys(self) -> None:
-        keys = help_keys(self.config.open_label) if self.tab == TODOIST else None
+        config = self.config
+        keys = (
+            help_keys(config.open_label, config.open_space_label) if self.tab == TODOIST else None
+        )
         self.push_screen(KeysHelp(self.config.open_label, self.config.open_space_label, keys))
 
     def action_settings(self) -> None:

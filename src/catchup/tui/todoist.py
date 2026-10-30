@@ -51,7 +51,7 @@ FOOTER_KEYS = [
 Problem = Literal["missing", "signed-out"]
 
 
-def help_keys(open_label: str) -> list[tuple[str, str]]:
+def help_keys(open_label: str, open_space_label: str) -> list[tuple[str, str]]:
     """Return the keys of the Todoist tab for the `?` list."""
     return [
         ("↑ ↓", "select a task"),
@@ -61,6 +61,7 @@ def help_keys(open_label: str) -> list[tuple[str, str]]:
         ("ctrl+enter", "open the task in Todoist"),
         ("z", "reschedule to a time you pick"),
         ("a", f"{open_label} with the task"),
+        ("A, ctrl+a", f"{open_space_label} with the task"),
         ("R", "read the tasks from Todoist again"),
         ("L", "sign in, when td is signed out"),
         ("c", "catch up now: start the agent run"),
@@ -211,6 +212,7 @@ class TodoistView(Vertical, can_focus=True):
         Binding("enter,ctrl+enter", "browse", "Open in Todoist", show=False, priority=True),
         Binding("z", "reschedule", "Reschedule", show=False),
         Binding("a", "claude", "Open in Claude", show=False),
+        Binding("A,shift+a,ctrl+a", "claude(True)", "Open in Claude in a new space", show=False),
         Binding("R", "refresh", "Refresh", show=False),
         Binding("L", "login", "Sign in", show=False),
     ]
@@ -448,21 +450,22 @@ class TodoistView(Vertical, can_focus=True):
         if self.app.is_running:
             self.refresh_tasks()
 
-    def action_claude(self) -> None:
+    def action_claude(self, space: bool = False) -> None:
         if self.selected:
-            self._open_in_claude(self.selected)
+            self._open_in_claude(self.selected, space)
 
     @work(group="todoist-open")
-    async def _open_in_claude(self, task: Task) -> None:
+    async def _open_in_claude(self, task: Task, space: bool) -> None:
         config = self.app.config
+        label = config.open_space_label if space else config.open_label
         # Titles and errors quote what other people wrote, so they are never read as markup.
-        self.app.notify(task.title, title=config.open_label, markup=False)
+        self.app.notify(task.title, title=label, markup=False)
         try:
-            await open_item(as_item(task), config)
+            await open_item(as_item(task), config, space=space)
         except CatchupError as e:
             self.app.notify(
                 str(e),
-                title=f"{config.open_label} failed",
+                title=f"{label} failed",
                 severity="error",
                 timeout=12,
                 markup=False,
