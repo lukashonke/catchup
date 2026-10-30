@@ -8,13 +8,13 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 from textual.geometry import Region
-from textual.widgets import Input, TextArea
+from textual.widgets import Input, Markdown, TextArea
 
-from catchup import agent
+from catchup import agent, context
 from catchup.config import Config, load_config
 from catchup.store import Kind, Link, Priority, Store, utc_now
 from catchup.tui.app import CatchupApp
-from catchup.tui.dialogs import KeysHelp, NoteEditor, SnoozePicker
+from catchup.tui.dialogs import ContextView, KeysHelp, NoteEditor, SnoozePicker
 from catchup.tui.settings import Settings
 from catchup.tui.widgets import Details, ItemList
 from catchup.when import parse_until
@@ -105,7 +105,7 @@ async def test_done_moves_the_item_to_the_done_tab_as_a_user_event(db: Path) -> 
     assert (last.action, last.actor) == ("done", "user")
 
 
-async def test_enter_opens_the_selected_item(db: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_a_opens_the_selected_item(db: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     item_id = add(db, "waiting", "Answer Ken", 1)
     with Store(db) as store:
         store.mark_seen(int(item_id))
@@ -116,7 +116,7 @@ async def test_enter_opens_the_selected_item(db: Path, monkeypatch: pytest.Monke
     app = CatchupApp(config)
     async with app.run_test(size=(140, 40)) as pilot:
         await pilot.pause()
-        await pilot.press("enter")
+        await pilot.press("a")
         await app.workers.wait_for_complete()
         await app.workers.wait_for_complete()
         assert "opened just now" in text(app, "#d-meta")
@@ -264,7 +264,7 @@ async def test_settings_save_to_the_config_and_take_effect(
         await pilot.press("ctrl+s")
         await pilot.pause()
         assert "Open in Codex" in text(app, "#open")
-        assert "enter  Open in Codex" in text(app, "#footer-keys")
+        assert "a  Open in Codex" in text(app, "#footer-keys")
 
     saved = load_config()
     assert (saved.open_label, saved.agent_every, saved.agent_prompt) == (
@@ -294,7 +294,7 @@ async def test_settings_refuse_a_bad_interval(
 async def test_c_starts_the_agent_run(db: Path, no_agent_runs: Mock) -> None:
     start = no_agent_runs
     app = CatchupApp(Config(agent_prompt="Sync my inbox."))
-    async with app.run_test(size=(140, 40)) as pilot:
+    async with app.run_test(size=(200, 40)) as pilot:
         await pilot.pause()
         await pilot.press("r")
         await app.workers.wait_for_complete()
@@ -496,7 +496,7 @@ async def test_question_mark_lists_every_key_and_holds_back_the_inbox_keys(db: P
         assert text(app, "#footer-help") == "s  settings   ?  keys"
         await pilot.press("question_mark")
         assert isinstance(app.screen, KeysHelp)
-        assert "enter       Open in Codex" in text(app, "#keys")
+        assert "a           Open in Codex" in text(app, "#keys")
         # Under the dialog, space does not mark the item done and q closes only the dialog.
         await pilot.press("space", "q")
         await app.workers.wait_for_complete()
@@ -508,7 +508,7 @@ async def test_narrow_footer_drops_whole_hints_and_keeps_the_help(db: Path) -> N
     app = CatchupApp(Config(agent_prompt="Sync my inbox."))
     async with app.run_test(size=(90, 40)) as pilot:
         await pilot.pause()
-        assert text(app, "#footer-keys").endswith("backspace  ignore")
+        assert text(app, "#footer-keys").endswith("space  done")
         assert text(app, "#footer-help") == "s  settings   ?  keys"
 
 
@@ -618,3 +618,56 @@ async def test_settings_show_the_end_of_the_agent_log(db: Path) -> None:
         log = app.screen.query_one("#agent_log", TextArea)
         assert log.read_only
         assert log.text.splitlines() == [f"line {n}" for n in range(200, 500)]
+
+
+@pytest.mark.parametrize("key", ["a", "A", "ctrl+a"])
+async def test_a_opens_in_a_tab_and_capital_a_or_ctrl_a_in_a_new_space(
+    db: Path, monkeypatch: pytest.MonkeyPatch, key: str
+) -> None:
+    add(db, "waiting", "Answer Ken", 1)
+    opened = AsyncMock()
+    monkeypatch.setattr("catchup.tui.app.open_item", opened)
+    app = CatchupApp(Config())
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        await pilot.press(key)
+        await app.workers.wait_for_complete()
+    assert opened.call_args.kwargs == {"space": key != "a"}
+
+
+async def test_enter_fetches_the_context_then_shows_it_full_screen(
+    db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    item_id = int(add(db, "waiting", "Answer Ken", 1))
+    fetched: list[int] = []
+    contexts: dict[int, context.Context] = {}
+    monkeypatch.setattr(
+        "catchup.context.fetch", lambda item, notes, config: fetched.append(item.id)
+    )
+    monkeypatch.setattr("catchup.context.read_all", lambda: dict(contexts))
+    app = CatchupApp(Config())
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        await pilot.press("enter")
+        await app.workers.wait_for_complete()
+        assert fetched == [item_id]
+
+        contexts[item_id] = context.Context(item_id, "fetching", utc_now())
+        await pilot.pause(2.5)  # The next poll reads it.
+        assert text(app, "#list").splitlines()[1][-1] in "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+        await pilot.press("enter")
+        assert fetched == [item_id]
+
+        contexts[item_id] = context.Context(
+            item_id, "ready", utc_now(), "## Ken waits\n\nOn **you**."
+        )
+        await pilot.pause(2.5)
+        assert text(app, "#list").splitlines()[1].endswith("◆")
+        await pilot.press("enter")
+        await pilot.pause()
+        assert isinstance(app.screen, ContextView)
+        assert app.screen.query_one("#c-body", Markdown).source.startswith("## Ken waits")
+        await pilot.press("r")
+        await app.workers.wait_for_complete()
+        assert not isinstance(app.screen, ContextView)
+        assert fetched == [item_id, item_id]

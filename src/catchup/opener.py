@@ -37,22 +37,31 @@ def item_env(item: Item) -> dict[str, str]:
     }
 
 
-async def open_item(item: Item, config: Config, environ: Mapping[str, str] = os.environ) -> None:
-    """Open the item with `open_command`, else with herdr inside herdr; raise CatchupError on failure."""
-    if config.open_command:
-        argv = config.open_command
-        result = await run_command(argv, {**environ, **item_env(item)})
+async def open_item(
+    item: Item, config: Config, environ: Mapping[str, str] = os.environ, space: bool = False
+) -> None:
+    """Open the item with its command, else with herdr inside herdr; raise CatchupError on failure.
+
+    With `space`, it opens in a new herdr space through `open_space_command` instead of a tab.
+    """
+    key, command, label = (
+        ("open_space_command", config.open_space_command, config.open_space_label)
+        if space
+        else ("open_command", config.open_command, config.open_label)
+    )
+    if command:
+        result = await run_command(command, {**environ, **item_env(item)})
         if result.returncode != 0:
             detail = result.stderr.strip() or result.stdout.strip() or "no output"
-            raise CatchupError(f"{argv[0]} exited with code {result.returncode}: {detail}")
+            raise CatchupError(f"{command[0]} exited with code {result.returncode}: {detail}")
     elif environ.get("HERDR_ENV") == "1":
         from catchup.herdr import open_in_herdr
 
-        await open_in_herdr(item.id, item.title, prompt_of(item), environ)
+        await open_in_herdr(item.id, item.title, prompt_of(item), environ, space=space)
     else:
         raise CatchupError(
-            f"{config.open_label} has nothing to run. Set open_command in {default_config_path()},"
-            ' for example open_command = ["/path/to/my-opener.sh"]'
+            f"{label} has nothing to run. Set {key} in {default_config_path()},"
+            f' for example {key} = ["/path/to/my-opener.sh"]'
         )
 
 

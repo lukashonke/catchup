@@ -247,6 +247,8 @@ async def test_settings_turn_the_todoist_tab_on(db: Path) -> None:
         await pilot.press("s")
         await pilot.pause()
         # A click, so the test fails when the checkbox is hidden.
+        app.screen.query_one("#todoist").scroll_visible(animate=False)
+        await pilot.pause()
         await pilot.click("#todoist")
         assert app.screen.query_one("#todoist", Checkbox).value
         await pilot.press("ctrl+s")

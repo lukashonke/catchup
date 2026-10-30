@@ -17,24 +17,24 @@ _LABEL_LENGTH = 32
 _COUNTS = re.compile(r"\s+\d+( · \d+ new)?$")
 
 
-async def open_in_herdr(item_id: int, title: str, prompt: str, environ: Mapping[str, str]) -> None:
-    """Create a tab labeled with the title in the home directory, start Claude and send the prompt."""
+async def open_in_herdr(
+    item_id: int, title: str, prompt: str, environ: Mapping[str, str], space: bool = False
+) -> None:
+    """Start Claude with the prompt in a new herdr tab, or with `space` in a new space.
+
+    The tab or space is labeled with the title and starts in the home directory.
+    """
     herdr = environ.get("HERDR_BIN_PATH") or "herdr"
-    # Inside a herdr pane this names the caller's workspace; without it herdr picks the focused one.
-    workspace = environ.get("HERDR_WORKSPACE_ID")
-    tab = await _call(
-        environ,
-        herdr,
-        "tab",
-        "create",
-        *(("--workspace", workspace) if workspace else ()),
-        "--cwd",
-        str(Path.home()),
-        "--label",
-        _label(title),
-        "--focus",
-    )
-    pane = tab["root_pane"]["pane_id"]
+    where = ["--cwd", str(Path.home()), "--label", _label(title), "--focus"]
+    # Both answers name the pane they start with as root_pane.
+    if space:
+        created = await _call(environ, herdr, "workspace", "create", *where)
+    else:
+        # Inside a herdr pane this names the caller's workspace; without it herdr picks the focused one.
+        workspace = environ.get("HERDR_WORKSPACE_ID")
+        flag = ("--workspace", workspace) if workspace else ()
+        created = await _call(environ, herdr, "tab", "create", *flag, *where)
+    pane = created["root_pane"]["pane_id"]
     # Agent names must be unique among live agents, and the same item can be opened twice.
     name = f"catchup-{item_id}-{secrets.token_hex(2)}"
     await _call(environ, herdr, "agent", "start", name, "--kind", "claude", "--pane", pane)

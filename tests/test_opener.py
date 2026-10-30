@@ -167,3 +167,36 @@ async def test_tab_title_does_nothing_outside_herdr(monkeypatch: pytest.MonkeyPa
     await title.show("3")
     await title.restore()
     assert fake.calls == []
+
+
+async def test_herdr_opener_creates_a_space_for_the_new_space_action(
+    item: Item, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = FakeRun(
+        (0, '{"result": {"workspace": {}, "root_pane": {"pane_id": "w9:p1"}}}', ""),
+        (0, '{"result": {}}', ""),
+        (0, '{"result": {}}', ""),
+    )
+    monkeypatch.setattr("catchup.herdr.run_command", fake)
+    environ = {"HERDR_ENV": "1", "HERDR_WORKSPACE_ID": "w1", "HERDR_BIN_PATH": "/opt/herdr"}
+
+    await open_item(item, Config(), environ, space=True)
+
+    (create, _), (start, _), _ = fake.calls
+    assert create == [
+        "/opt/herdr", "workspace", "create", "--cwd", str(Path.home()),
+        "--label", "Answer Ken about the flaky…", "--focus",
+    ]  # fmt: skip
+    assert start[-2:] == ["--pane", "w9:p1"]
+
+
+async def test_the_new_space_action_runs_its_own_command(
+    item: Item, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = FakeRun((0, "", ""))
+    monkeypatch.setattr("catchup.opener.run_command", fake)
+    config = Config(open_command=["/opt/tab.sh"], open_space_command=["/opt/space.sh"])
+
+    await open_item(item, config, {}, space=True)
+
+    assert fake.calls[0][0] == ["/opt/space.sh"]

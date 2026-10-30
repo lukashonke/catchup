@@ -1,7 +1,7 @@
 """The list of items and the details pane."""
 
 from datetime import datetime, timedelta
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from rich.console import Console, ConsoleOptions, RenderResult
 from rich.measure import Measurement
@@ -16,8 +16,9 @@ from textual.style import Style
 from textual.widgets import Button, Input, Label, Markdown, OptionList, Static
 from textual.widgets.option_list import Option
 
+from catchup.context import Context
 from catchup.opener import prompt_of
-from catchup.store import Event, Item, State
+from catchup.store import Event, Item, State, utc_now
 from catchup.tui import theme
 from catchup.when import format_age
 
@@ -89,7 +90,19 @@ class KeyHints:
         return line
 
 
-def _row(item: Item, now: datetime) -> Table:
+def _context_mark(item: Item, context: Context | None, frame: str) -> Text:
+    if context is None:
+        return Text("")
+    if context.state == "fetching":
+        return Text(frame, style=theme.ACCENT)
+    if context.state == "failed":
+        return Text("✕", style=theme.URGENT)
+    if context.stale(item):
+        return Text("◇", style=theme.DIM)
+    return Text("◆", style=theme.ACCENT)
+
+
+def _row(item: Item, now: datetime, context: Context | None = None, frame: str = "") -> Table:
     fyi = item.kind == "fyi"
     if fyi:
         marker = Text("·", style=theme.FAINT)
@@ -105,6 +118,7 @@ def _row(item: Item, now: datetime) -> Table:
     grid.add_column(ratio=1)
     grid.add_column(width=8, no_wrap=True)
     grid.add_column(width=4, no_wrap=True, justify="right")
+    grid.add_column(width=1, no_wrap=True)
     if item.new:
         status = Text("•", style=f"bold {theme.ACCENT}")
     else:
@@ -115,6 +129,7 @@ def _row(item: Item, now: datetime) -> Table:
         _Line(Text(item.title, style=theme.FEED if fyi else "")),
         Text(link_type, style=theme.LINK_COLORS.get(link_type, theme.DIM)),
         Text(format_age(now - item.created_at), style=age_color(item, now)),
+        _context_mark(item, context, frame),
     )
     return grid
 
@@ -123,17 +138,27 @@ def _section(left: str, right: str) -> Table:
     grid = Table.grid(expand=True)
     grid.add_column(ratio=1)
     grid.add_column(justify="right")
-    grid.add_row(Text(left, style=f"bold {theme.DIM}"), Text(right, style=theme.DIM))
+    # Room for the rows' context mark, so the count lines up with their ages.
+    grid.add_column(width=2)
+    grid.add_row(Text(left, style=f"bold {theme.DIM}"), Text(right, style=theme.DIM), "")
     return grid
 
 
 class ItemList(OptionList):
     """The waiting items of a state tab, and on the Open tab the feed below them."""
 
-    BINDINGS: ClassVar = [Binding("enter", "open", "Open", show=False)]
+    BINDINGS: ClassVar = [Binding("enter", "open", "Context", show=False)]
 
     class OpenRequested(Message):
         """Enter was pressed on the selected item."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.contexts: dict[int, Context] = {}
+        self.items: dict[int, Item] = {}
+        self.now = utc_now()
+        # The spinner frame of the rows whose context is being fetched.
+        self.frame = ""
 
     def show(
         self,
@@ -146,17 +171,19 @@ class ItemList(OptionList):
     ) -> None:
         """Replace the rows and select `selected`, the row in its place if it is gone, else the first."""
         previous = self.highlighted
+        self.items = {item.id: item for item in [*waiting, *feed]}
+        self.now = now
         options: list[Option] = []
         if tab == "open":
             options.append(Option(_section("WAITING ON YOU", str(len(waiting))), disabled=True))
-        options += [Option(_row(item, now), id=str(item.id)) for item in waiting]
+        options += [Option(self._row(item), id=str(item.id)) for item in waiting]
         if not waiting:
             empty = "Nothing matches the filter." if filtered else _EMPTY[tab]
             options.append(Option(Text(empty, style=theme.FAINT), disabled=True))
         if feed:
             options.append(Option(Text(""), disabled=True))
             options.append(Option(_section("FYI", "newest first"), disabled=True))
-            options += [Option(_row(item, now), id=str(item.id)) for item in feed]
+            options += [Option(self._row(item), id=str(item.id)) for item in feed]
         self.set_options(options)
 
         enabled = [i for i, option in enumerate(options) if not option.disabled]
@@ -170,6 +197,18 @@ class ItemList(OptionList):
             self.highlighted = enabled[0]
         else:
             self.highlighted = None
+
+    def show_contexts(self, contexts: dict[int, Context], frame: str) -> None:
+        """Redraw the rows whose context mark changed, or that spin while it is fetched."""
+        for item_id, item in self.items.items():
+            before, after = self.contexts.get(item_id), contexts.get(item_id)
+            if before != after or (after and after.state == "fetching"):
+                self.replace_option_prompt(str(item_id), _row(item, self.now, after, frame))
+        self.contexts = contexts
+        self.frame = frame
+
+    def _row(self, item: Item) -> Table:
+        return _row(item, self.now, self.contexts.get(item.id), self.frame)
 
     @property
     def selected_id(self) -> int | None:

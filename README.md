@@ -22,7 +22,7 @@ uv tool install git+https://github.com/lukashonke/catchup
    catchup
    ```
 
-   Up and down select an item, left and right switch the state tab. Enter opens the item in Claude, Ctrl+Enter opens its first link, Space marks it done, Backspace ignores it, z snoozes it, u undoes the last change, n adds a note for the agent, / filters the list, s opens the settings, and q quits. Press ? for every key.
+   Up and down select an item, left and right switch the state tab. Enter fetches the item's context and then shows it full screen (see [Context](#context)), a opens the item in Claude in a new tab, A or Ctrl+A opens it in a new space, Ctrl+Enter opens its first link, Space marks it done, Backspace ignores it, z snoozes it, u undoes the last change, n adds a note for the agent, / filters the list, s opens the settings, and q quits. Press ? for every key.
 
    A dot marks the items the agent added or changed since you last looked at them. Inside [herdr](https://herdr.dev), the tab label shows the counts too, such as `catchup 12 · 3 new`.
 
@@ -73,11 +73,13 @@ Run `catchup --help` and `catchup COMMAND --help` for every option.
 
 ## Open in Claude
 
-"Open in Claude" in the UI (or Enter on an item) runs a command that starts a coding agent with the item's prompt. Set the command in `~/.config/catchup/config.toml`, as a list of arguments, and optionally rename the button:
+"Open in Claude" in the UI (or `a` on an item) runs a command that starts a coding agent with the item's prompt. A second action, on `A` or Ctrl+A, does the same in a new herdr space. Set the commands in `~/.config/catchup/config.toml`, as lists of arguments, and optionally rename the actions:
 
 ```toml
 open_command = ["/path/to/my-opener.sh"]
 open_label = "Open in Codex"
+open_space_command = ["/path/to/my-opener.sh", "--new-window"]
+open_space_label = "Open in Codex, new window"
 ```
 
 Catchup runs the command without a shell and passes the item in environment variables:
@@ -89,7 +91,7 @@ Catchup runs the command without a shell and passes the item in environment vari
 
 The prompt comes from messages that other people wrote. Never paste these values into a shell string, such as `sh -c "claude '$CATCHUP_PROMPT'"`: a message could then run commands on your machine. Pass them to programs as separate arguments.
 
-If `open_command` is not set and the UI runs inside [herdr](https://herdr.dev) (`HERDR_ENV=1`), catchup uses its bundled herdr opener. It creates a tab in the current workspace, labeled with the item title, in your home directory, and starts Claude Code in it with the prompt. Outside herdr and with no `open_command`, the button tells you how to set it.
+If `open_command` is not set and the UI runs inside [herdr](https://herdr.dev) (`HERDR_ENV=1`), catchup uses its bundled herdr opener. It creates a tab in the current workspace, labeled with the item title, in your home directory, and starts Claude Code in it with the prompt. Without `open_space_command`, the second action creates a herdr space instead of a tab. Outside herdr and with no command set, the action tells you how to set it.
 
 ### Example: a tmux window
 
@@ -104,6 +106,19 @@ exec tmux new-window -n "$name" -c "$HOME" claude -- "$CATCHUP_PROMPT"
 ```
 
 When `new-window` gets the command as more than one argument, tmux runs it directly, without a shell, so the prompt reaches Claude Code as one argument with nothing expanded. Do not pass the command as one string: tmux then runs it with `sh -c` on the tmux server. The `--` stops Claude Code from reading a prompt that starts with `-` as an option. The new window gets the tmux server's environment, so `claude` must be on the `PATH` that the tmux server started with.
+
+## Context
+
+Enter on an item fetches its context in the background: a quick separate agent run reads the item's sources and summarizes what you need to catch up on it. While it runs, the row shows a spinner; when it is ready, a ◆. Enter on that row shows the context full screen, where `r` fetches it again and `y` copies it. A ◇ means the agent changed the item after the fetch, so the context may be out of date. A ✕ means the fetch failed; Enter shows why.
+
+```toml
+context_command = ["claude", "-p", "--model", "haiku", "--permission-mode", "auto"]  # the default
+context_prompt = "Fetch any relevant context for this item ..."  # the default asks to only read
+```
+
+- The command runs in your home directory with the prompt on stdin, followed by the item: its title, body, links and your notes. What it prints is the context, as Markdown.
+- At most 3 fetches run at once. A fetch that takes longer than 5 minutes is stopped. Time while the computer sleeps does not count.
+- Each context is a file in `contexts/` next to the database, and `context.log` there holds the start and end of every fetch and what the command wrote to stderr.
 
 ## Agent runs
 

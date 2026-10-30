@@ -139,24 +139,24 @@ def _trim_log() -> None:
 
 def supervise(argv: list[str], limit: timedelta = TIME_LIMIT) -> int:
     """Run the agent command, stop it past `limit`, record how it ended, and return its code."""
-    print(f"--- {_stamp()} started: {shlex.join(argv)}", flush=True)
+    print(f"--- {stamp()} started: {shlex.join(argv)}", flush=True)
     # Its own process group, so stopping it also stops the tools it started.
     child = subprocess.Popen(argv, start_new_session=True)
     # Stopping the supervisor stops the run with it, and the exit code still gets recorded.
-    signal.signal(signal.SIGTERM, lambda *_: _stop(child.pid, signal.SIGTERM))
+    signal.signal(signal.SIGTERM, lambda *_: stop_group(child.pid, signal.SIGTERM))
     try:
         code = child.wait(timeout=limit.total_seconds())
         ending = f"exited with code {code}"
     except subprocess.TimeoutExpired:
-        _stop(child.pid, signal.SIGTERM)
+        stop_group(child.pid, signal.SIGTERM)
         try:
             child.wait(timeout=_STOP_GRACE_SECONDS)
         except subprocess.TimeoutExpired:
-            _stop(child.pid, signal.SIGKILL)
+            stop_group(child.pid, signal.SIGKILL)
             child.wait()
         code = TIMED_OUT
         ending = f"stopped after {_minutes(limit)}: it ran too long"
-    print(f"--- {_stamp()} {ending}", flush=True)
+    print(f"--- {stamp()} {ending}", flush=True)
     with _locked() as path:
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
@@ -168,14 +168,16 @@ def supervise(argv: list[str], limit: timedelta = TIME_LIMIT) -> int:
     return code
 
 
-def _stop(pgid: int, sig: signal.Signals) -> None:
+def stop_group(pgid: int, sig: signal.Signals) -> None:
+    """Send `sig` to a process group that may have ended already."""
     try:
         os.killpg(pgid, sig)
     except ProcessLookupError:
         pass
 
 
-def _stamp() -> str:
+def stamp() -> str:
+    """Return the local time as the logs show it."""
     return f"{datetime.now().astimezone():%Y-%m-%d %H:%M:%S}"
 
 
@@ -200,13 +202,16 @@ def _read(path: Path) -> RunState:
         exit_code = data.get("exit_code")
     except (FileNotFoundError, ValueError, KeyError, TypeError):
         return RunState(started_at=None, running=False)
-    running = exit_code is None and _alive(pid)
+    running = exit_code is None and process_alive(pid)
     return RunState(started_at=started_at, running=running, exit_code=exit_code)
 
 
-def _alive(pid: int) -> bool:
+def process_alive(pid: int) -> bool:
+    """Return whether a process with this id runs."""
     # shortcut: a recycled process id reads as a running agent until that process exits;
     # store the process start time too if this ever blocks a run for long.
+    if pid <= 0:
+        return False  # os.kill() would signal a process group instead.
     try:
         os.kill(pid, 0)
     except ProcessLookupError:

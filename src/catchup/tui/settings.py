@@ -43,6 +43,14 @@ class Settings(ModalScreen[Config | None]):
                 classes="s-hint",
             )
             yield Input(_join(config.open_command), id="open_command")
+            yield Label("New space action name", classes="s-label")
+            yield Input(config.open_space_label, id="open_space_label")
+            yield Label("New space command", classes="s-label")
+            yield Static(
+                "The same, for A and ctrl+a. Empty opens a new herdr space inside herdr.",
+                classes="s-hint",
+            )
+            yield Input(_join(config.open_space_command), id="open_space_command")
             yield Label("Agent prompt", classes="s-label")
             yield Static(
                 "What the agent run is told to do. Empty turns the agent run off.",
@@ -54,6 +62,17 @@ class Settings(ModalScreen[Config | None]):
             yield Input(_join(config.agent_command), id="agent_command")
             yield Label("Run the agent every", classes="s-label")
             yield Input(config.agent_every, id="agent_every", placeholder="30m, 1h or 4h")
+            yield Label("Context prompt", classes="s-label")
+            yield Static(
+                "What enter asks for an item's context. The item follows it.", classes="s-hint"
+            )
+            yield TextArea(config.context_prompt, id="context_prompt", soft_wrap=True)
+            yield Label("Context command", classes="s-label")
+            yield Static(
+                "Runs in your home directory with the prompt on stdin; prints the context.",
+                classes="s-hint",
+            )
+            yield Input(_join(config.context_command), id="context_command")
             yield Label("Todoist", classes="s-label")
             yield Static(
                 "A tab with your Todoist tasks, read through td, the Todoist CLI."
@@ -91,13 +110,23 @@ class Settings(ModalScreen[Config | None]):
     def action_save(self) -> None:
         data: dict[str, object] = {
             "open_label": self.query_one("#open_label", Input).value,
+            "open_space_label": self.query_one("#open_space_label", Input).value,
             "agent_prompt": self.query_one("#agent_prompt", TextArea).text,
             "agent_every": self.query_one("#agent_every", Input).value.strip(),
             "todoist": self.query_one("#todoist", Checkbox).value,
             "todoist_filter": self.query_one("#todoist_filter", Input).value,
         }
+        # An empty prompt falls back to the default, as a missing key does.
+        if prompt := self.query_one("#context_prompt", TextArea).text.strip():
+            data["context_prompt"] = prompt
         try:
-            for key in ("open_command", "agent_command", "todoist_command"):
+            for key in (
+                "open_command",
+                "open_space_command",
+                "agent_command",
+                "context_command",
+                "todoist_command",
+            ):
                 text = self.query_one(f"#{key}", Input).value
                 try:
                     argv = shlex.split(text)
