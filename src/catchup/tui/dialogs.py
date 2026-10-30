@@ -39,14 +39,15 @@ class SnoozePicker(ModalScreen[datetime | None]):
         ),
     ]
 
-    def __init__(self, title: str) -> None:
+    def __init__(self, title: str, heading: str = "Snooze until") -> None:
         super().__init__()
         self.item_title = title
+        self.heading = heading
 
     def compose(self) -> ComposeResult:
         now = utc_now()
         with Vertical(classes="dialog"):
-            yield Static("Snooze until", classes="dialog-title")
+            yield Static(self.heading, classes="dialog-title")
             yield Static(Content(self.item_title), classes="dialog-hint")
             yield OptionList(
                 *(
@@ -112,12 +113,14 @@ class KeysHelp(ModalScreen[None]):
 
     BINDINGS: ClassVar = [Binding("escape,question_mark,q", "dismiss", "Close", show=False)]
 
-    def __init__(self, open_label: str) -> None:
+    def __init__(self, open_label: str, keys: list[tuple[str, str]] | None = None) -> None:
         super().__init__()
         self.open_label = open_label
+        # The keys of another tab, such as the Todoist tab, in place of the inbox keys.
+        self.keys = keys
 
     def compose(self) -> ComposeResult:
-        keys = [
+        keys = self.keys or [
             ("↑ ↓", "select an item"),
             ("← →", "previous or next tab"),
             ("enter", self.open_label),
