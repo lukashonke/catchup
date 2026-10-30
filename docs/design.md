@@ -143,7 +143,7 @@ When "Open in Claude" succeeds, the TUI records an `opened` event by you. The de
 The mouse and the up and down keys select items. The keys:
 
 - Left and right: the previous and the next state tab.
-- Enter: fetch the item's context, or show it full screen once it is ready.
+- Enter: fetch the item's context, or show it in a popup once it is ready.
 - a: Open in Claude, in a new herdr tab. A or Ctrl+A: the same in a new herdr space.
 - Ctrl+Enter: open the first link in the browser. The terminal must send Ctrl+Enter as its own key (the kitty keyboard protocol); otherwise it arrives as Enter.
 - Space: Done. Backspace: Ignore. z: the snooze picker. These act only on open and snoozed waiting items.

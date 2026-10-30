@@ -387,10 +387,24 @@ SnoozePicker, NoteEditor, KeysHelp {
 }
 
 ContextView {
-    background: $background;
+    align: center middle;
+    background: $chrome 60%;
+}
+
+#context-box {
+    /* Long lines are hard to read, so the popup stays narrow on a wide terminal. */
+    width: 100;
+    max-width: 100%;
+    height: auto;
+    max-height: 90%;
+    background: $panel;
+    border: solid $line;
     & > #context {
-        padding: 1 2;
+        height: auto;
+        padding: 1 2 0 2;
+        background: $panel;
         scrollbar-size-vertical: 1;
+        scrollbar-background: $panel;
         scrollbar-color: $line;
         & > #c-title {
             color: $bright;
@@ -400,14 +414,10 @@ ContextView {
             color: $dim;
             margin-bottom: 1;
         }
-        & > #c-title, & > #c-meta, & > #c-body, & > #c-error {
-            /* Long lines are hard to read on a wide terminal. */
-            max-width: 100;
-        }
         & > #c-body {
             margin: 0;
             padding: 0;
-            background: $background;
+            background: $panel;
             & MarkdownParagraph {
                 margin: 0 0 1 0;
             }
@@ -419,12 +429,14 @@ ContextView {
                 margin-top: 0;
             }
         }
+        & > #c-error {
+            margin-bottom: 1;
+        }
     }
     & > #c-keys {
         dock: bottom;
         height: 1;
         padding: 0 2;
-        background: $chrome;
         color: $dim;
     }
 }

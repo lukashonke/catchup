@@ -637,7 +637,7 @@ async def test_a_opens_in_a_tab_and_capital_a_or_ctrl_a_in_a_new_space(
     assert opened.call_args.kwargs == {"space": key != "a"}
 
 
-async def test_enter_fetches_the_context_then_shows_it_full_screen(
+async def test_enter_fetches_the_context_then_shows_it(
     db: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     item_id = add(db, "waiting", "Answer Ken", 1)

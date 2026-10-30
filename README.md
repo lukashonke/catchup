@@ -22,7 +22,7 @@ uv tool install git+https://github.com/lukashonke/catchup
    catchup
    ```
 
-   Up and down select an item, left and right switch the state tab. Enter fetches the item's context and then shows it full screen (see [Context](#context)), a opens the item in Claude in a new tab, A or Ctrl+A opens it in a new space, Ctrl+Enter opens its first link, Space marks it done, Backspace ignores it, z snoozes it, u undoes the last change, n adds a note for the agent, / filters the list, s opens the settings, and q quits. Press ? for every key.
+   Up and down select an item, left and right switch the state tab. Enter fetches the item's context and then shows it in a popup (see [Context](#context)), a opens the item in Claude in a new tab, A or Ctrl+A opens it in a new space, Ctrl+Enter opens its first link, Space marks it done, Backspace ignores it, z snoozes it, u undoes the last change, n adds a note for the agent, / filters the list, s opens the settings, and q quits. Press ? for every key.
 
    A dot marks the items the agent added or changed since you last looked at them. Inside [herdr](https://herdr.dev), the tab label shows the counts too, such as `catchup 12 · 3 new`.
 
@@ -109,7 +109,7 @@ When `new-window` gets the command as more than one argument, tmux runs it direc
 
 ## Context
 
-Enter on an item, or on a Todoist task, fetches its context in the background: a quick separate agent run reads the item's sources and summarizes what you need to catch up on it. While it runs, the row shows a spinner; when it is ready, a ◆. Enter on that row shows the context full screen, where `r` fetches it again and `y` copies it. A ◇ means the agent changed the item after the fetch, so the context may be out of date. A ✕ means the fetch failed; Enter shows why.
+Enter on an item, or on a Todoist task, fetches its context in the background: a quick separate agent run reads the item's sources and summarizes what you need to catch up on it. While it runs, the row shows a spinner; when it is ready, a ◆. Enter on that row shows the context in a popup, where `r` fetches it again and `y` copies it. A ◇ means the agent changed the item after the fetch, so the context may be out of date. A ✕ means the fetch failed; Enter shows why.
 
 ```toml
 context_command = ["claude", "-p", "--model", "haiku", "--permission-mode", "auto"]  # the default

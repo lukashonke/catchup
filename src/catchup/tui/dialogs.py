@@ -129,7 +129,7 @@ class KeysHelp(ModalScreen[None]):
         keys = self.keys or [
             ("↑ ↓", "select an item"),
             ("← →", "previous or next tab"),
-            ("enter", "fetch the context; once it is ready, show it full screen"),
+            ("enter", "fetch the context; once it is ready, show it"),
             ("a", self.open_label),
             ("A, ctrl+a", self.open_space_label),
             ("ctrl+enter", "open the first link in the browser"),
@@ -156,7 +156,7 @@ class KeysHelp(ModalScreen[None]):
 
 
 class ContextView(ModalScreen[str | None]):
-    """An item's context, full screen; dismiss with "fetch" to fetch it again, else None."""
+    """An item's context, in a popup; dismiss with "fetch" to fetch it again, else None."""
 
     BINDINGS: ClassVar = [
         Binding("escape,q,enter", "dismiss(None)", "Close", show=False),
@@ -180,15 +180,16 @@ class ContextView(ModalScreen[str | None]):
             )
         else:
             meta = Content(when)
-        with VerticalScroll(id="context"):
-            yield Static(Content(self.item.title), id="c-title")
-            yield Static(meta, id="c-meta")
-            # Fetched from other people's messages, so a failure shows as text, not as Markdown.
-            if context.state == "failed":
-                yield Static(Content(context.text), id="c-error")
-            else:
-                yield Markdown(context.text, id="c-body")
-        yield Static("esc close · r fetch again · y copy", id="c-keys")
+        with Vertical(id="context-box"):
+            yield Static("esc close · r fetch again · y copy", id="c-keys")
+            with VerticalScroll(id="context"):
+                yield Static(Content(self.item.title), id="c-title")
+                yield Static(meta, id="c-meta")
+                # Fetched from other people's messages, so a failure shows as text, not Markdown.
+                if context.state == "failed":
+                    yield Static(Content(context.text), id="c-error")
+                else:
+                    yield Markdown(context.text, id="c-body")
 
     def action_copy(self) -> None:
         # Terminals and multiplexers often drop the escape code copy_to_clipboard() sends.
