@@ -118,6 +118,7 @@ agent_every = "1h"  # the default; 30m, 1h, 4h, ...
 ```
 
 - With no `agent_prompt`, the UI starts nothing.
+- The UI reads the file again when it changes, so the next run uses your edits without a restart.
 - The command runs in your home directory, in the background, with the prompt on stdin. It keeps running when you close the UI.
 - When the interval has passed since the last start, the UI starts the next run. Press `c` (catch up now) to start one now. If several UIs are open, only one of them starts each run.
 - The header shows when the agent runs and when the next run is due. The output of the last run is in `agent.log` next to the database.
