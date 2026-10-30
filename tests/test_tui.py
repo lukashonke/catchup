@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 from textual.geometry import Region
-from textual.widgets import Input
+from textual.widgets import Input, TextArea
 
 from catchup import agent
 from catchup.config import Config, load_config
@@ -507,7 +507,7 @@ async def test_question_mark_lists_every_key_and_holds_back_the_inbox_keys(db: P
     app = CatchupApp(Config(open_label="Open in Codex"))
     async with app.run_test(size=(140, 40)) as pilot:
         await pilot.pause()
-        assert text(app, "#footer-help") == "?  keys"
+        assert text(app, "#footer-help") == "s  settings   ?  keys"
         await pilot.press("question_mark")
         assert isinstance(app.screen, KeysHelp)
         assert "enter       Open in Codex" in text(app, "#keys")
@@ -522,8 +522,8 @@ async def test_narrow_footer_drops_whole_hints_and_keeps_the_help(db: Path) -> N
     app = CatchupApp(Config(agent_prompt="Sync my inbox."))
     async with app.run_test(size=(90, 40)) as pilot:
         await pilot.pause()
-        assert text(app, "#footer-keys").endswith("/  filter")
-        assert text(app, "#footer-help") == "?  keys"
+        assert text(app, "#footer-keys").endswith("backspace  ignore")
+        assert text(app, "#footer-help") == "s  settings   ?  keys"
 
 
 async def test_counts_show_on_the_herdr_tab_until_exit(
@@ -600,3 +600,35 @@ async def test_an_agent_run_due_at_start_does_not_freeze_the_screen(
             assert not agent.read_state().running
     finally:
         loop.set_task_factory(None)
+
+
+async def test_the_header_spins_while_the_agent_runs_and_flags_a_failed_run(
+    db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    state = agent.RunState(started_at=utc_now(), running=True)
+    monkeypatch.setattr("catchup.agent.read_state", lambda: state)
+    app = CatchupApp(Config(agent_prompt="Sync my inbox."))
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        first = text(app, "#last-run")
+        await pilot.pause(0.3)
+        assert "agent running since" in first
+        assert text(app, "#last-run") != first
+
+        state = agent.RunState(started_at=utc_now(), running=False, exit_code=124)
+        await app.check_agent()
+        await pilot.pause()
+        assert "agent run failed" in text(app, "#last-run")
+        assert "s for the log" in text(app, "#last-run")
+
+
+async def test_settings_show_the_end_of_the_agent_log(db: Path) -> None:
+    agent.log_path().write_text("".join(f"line {n}\n" for n in range(500)))
+    app = CatchupApp(Config())
+    async with app.run_test(size=(140, 50)) as pilot:
+        await pilot.pause()
+        await pilot.press("s")
+        await pilot.pause()
+        log = app.screen.query_one("#agent_log", TextArea)
+        assert log.read_only
+        assert log.text.splitlines() == [f"line {n}" for n in range(200, 500)]

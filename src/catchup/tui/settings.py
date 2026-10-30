@@ -10,8 +10,10 @@ from textual.containers import Horizontal, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, Static, TextArea
 
-from catchup import CatchupError
+from catchup import CatchupError, agent
 from catchup.config import Config, default_config_path, save_config, validate
+
+LOG_LINES = 300
 
 
 class Settings(ModalScreen[Config | None]):
@@ -52,10 +54,20 @@ class Settings(ModalScreen[Config | None]):
             yield Input(_join(config.agent_command), id="agent_command")
             yield Label("Run the agent every", classes="s-label")
             yield Input(config.agent_every, id="agent_every", placeholder="30m, 1h or 4h")
+            yield Label("Agent log", classes="s-label")
+            yield Static(
+                f"The last runs, newest at the bottom. {agent.log_path()}", classes="s-hint"
+            )
+            yield TextArea(_log_tail(), id="agent_log", read_only=True, soft_wrap=True)
             with Horizontal(id="s-actions"):
                 yield Button("Save", id="save", classes="primary", compact=True)
                 yield Button("Cancel", id="cancel", compact=True)
             yield Static("ctrl+s save · esc cancel", id="s-keys")
+
+    def on_mount(self) -> None:
+        log = self.query_one("#agent_log", TextArea)
+        log.move_cursor(log.document.end)
+        log.scroll_end(animate=False)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         event.stop()
@@ -86,6 +98,14 @@ class Settings(ModalScreen[Config | None]):
             self.notify(str(e), title="Not saved", severity="error", markup=False)
             return
         self.dismiss(config)
+
+
+def _log_tail(lines: int = LOG_LINES) -> str:
+    try:
+        text = agent.log_path().read_text(encoding="utf-8", errors="replace")
+    except FileNotFoundError:
+        return "The agent has not run yet."
+    return "\n".join(text.rstrip("\n").splitlines()[-lines:]) or "The last run printed nothing."
 
 
 def _join(argv: list[str] | tuple[str, ...] | None) -> str:

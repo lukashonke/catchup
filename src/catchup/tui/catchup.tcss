@@ -270,6 +270,14 @@ Settings {
             background: $selected;
         }
     }
+    & > #agent_log {
+        height: 12;
+        background: $chrome;
+        color: $dim;
+        &:focus {
+            background: $chrome;
+        }
+    }
     & > #s-actions {
         height: auto;
         margin-top: 1;

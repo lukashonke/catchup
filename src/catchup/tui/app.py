@@ -44,6 +44,8 @@ SEEN_SECONDS = 1.0
 TAB_RESTORE_SECONDS = 2.0
 AGENT_CHECK_SECONDS = 30.0
 AGENT_POLL_SECONDS = 1.0
+SPIN_SECONDS = 0.1
+SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 NARROW_COLUMNS = 110
 TINY_COLUMNS = 62
 _CHANGED = {"done": "Done", "ignored": "Ignored", "open": "Reopened"}
@@ -103,6 +105,7 @@ class CatchupApp(App[None]):
         self._poll_key: tuple[int, int] | None = None
         self._poll_error: str | None = None
         self.agent_state = agent.RunState(started_at=None, running=False)
+        self._spin = 0
         # The items as they were before each state change made in this session, latest last.
         self._undo: list[Item] = []
         # The new item that counts as seen when its timer fires, unless the selection moves first.
@@ -122,8 +125,8 @@ class CatchupApp(App[None]):
             yield Details(id="details")
         with Horizontal(id="footer"):
             yield Static(id="footer-keys")
-            # Its own widget, so a narrow terminal drops the other keys and never this one.
-            yield Static(KeyHints([("?", "keys")]), id="footer-help")
+            # Its own widget, so a narrow terminal drops the other keys and never these.
+            yield Static(KeyHints([("s", "settings"), ("?", "keys")]), id="footer-help")
 
     async def on_mount(self) -> None:
         self._show_config()
@@ -131,6 +134,7 @@ class CatchupApp(App[None]):
         await self.reload()
         self.set_interval(POLL_SECONDS, self.poll)
         self.set_interval(AGENT_CHECK_SECONDS, self.check_agent)
+        self.set_interval(SPIN_SECONDS, self._spin_agent)
         await self.check_agent()
 
     def _show_config(self) -> None:
@@ -139,6 +143,7 @@ class CatchupApp(App[None]):
         keys = [
             ("enter", self.config.open_label),
             ("space", "done"),
+            ("backspace", "ignore"),
             ("z", "snooze"),
             ("n", "note"),
             ("/", "filter"),
@@ -180,8 +185,7 @@ class CatchupApp(App[None]):
             self.agent_state = agent.read_state()
         except (CatchupError, OSError) as e:
             self.notify(str(e), title="Agent run failed", severity="error", markup=False)
-        if self.snapshot:
-            self._show_header(self.snapshot)
+        self._show_agent()
 
     def action_run_agent(self) -> None:
         if not self.config.agent_prompt:
@@ -207,8 +211,13 @@ class CatchupApp(App[None]):
         while (code := process.poll()) is None:
             await asyncio.sleep(AGENT_POLL_SECONDS)
         if code != 0 and self.is_running:
+            ending = (
+                f"It ran longer than {agent.TIME_LIMIT.seconds // 60} minutes and was stopped."
+                if code == agent.TIMED_OUT
+                else f"It exited with code {code}."
+            )
             self.notify(
-                f"It exited with code {code}. The output is in {agent.log_path()}.",
+                f"{ending} Press s for the log.",
                 title="Agent run failed",
                 severity="error",
                 timeout=20,
@@ -291,24 +300,41 @@ class CatchupApp(App[None]):
         self.query_one("#summary", Static).update(summary)
         new = f" · {snapshot.new} new" if snapshot.new else ""
         self._show_tab_title(f"{snapshot.counts['open']}{new}")
-        last = snapshot.last_agent_at
-        state = self.agent_state
-        if state.running and state.started_at:
-            last_run = f"agent running since {state.started_at.astimezone():%H:%M}"
-        elif last:
-            last_run = f"last agent run {_time_and_day(last)}"
-        else:
-            last_run = "the agent has not run yet"
-        if self.config.agent_prompt and not state.running:
-            due = (state.started_at or utc_now()) + parse_every(self.config.agent_every)
-            last_run += f" · next {max(due, utc_now()).astimezone():%H:%M}"
-        self.query_one("#last-run", Static).update(last_run)
+        self._show_agent()
         tabs = []
         for state in TABS:
             label = f" {state.capitalize()} {snapshot.counts[state]} "
             style = f"bold {theme.INK} on {theme.ACCENT}" if state == self.tab else theme.DIM
             tabs.append(Content.styled(label, style).stylize(Style.from_meta({"tab": state})))
         self.query_one("#tabs", Static).update(Content(" ").join(tabs))
+
+    def _show_agent(self) -> None:
+        """Show whether the agent runs, how its last run went, and when the next one is due."""
+        state = self.agent_state
+        if state.running and state.started_at:
+            frame = SPINNER[self._spin % len(SPINNER)]
+            status = Content.assemble(
+                (frame, theme.ACCENT),
+                f" agent running since {state.started_at.astimezone():%H:%M}",
+            )
+        elif state.failed and state.started_at:
+            status = Content.assemble(
+                ("agent run failed", theme.URGENT),
+                f" {_time_and_day(state.started_at)} · s for the log",
+            )
+        elif self.snapshot and self.snapshot.last_agent_at:
+            status = Content(f"last agent run {_time_and_day(self.snapshot.last_agent_at)}")
+        else:
+            status = Content("the agent has not run yet")
+        if self.config.agent_prompt and not state.running:
+            due = (state.started_at or utc_now()) + parse_every(self.config.agent_every)
+            status += f" · next {max(due, utc_now()).astimezone():%H:%M}"
+        self.query_one("#last-run", Static).update(status)
+
+    def _spin_agent(self) -> None:
+        if self.agent_state.running:
+            self._spin += 1
+            self._show_agent()
 
     @work(group="herdr", exclusive=True)
     async def _show_tab_title(self, counts: str) -> None:
