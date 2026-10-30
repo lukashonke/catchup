@@ -174,7 +174,7 @@ Screen {
 }
 
 /* The Todoist tab takes the place of the panes while it is shown. */
-#todoist {
+#todoist-view {
     display: none;
     height: 1fr;
 }

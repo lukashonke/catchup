@@ -130,7 +130,7 @@ class CatchupApp(App[None]):
         with Horizontal(id="panes"):
             yield ItemList(id="list")
             yield Details(id="details")
-        yield TodoistView(id="todoist")
+        yield TodoistView(id="todoist-view")
         with Horizontal(id="footer"):
             yield Static(id="footer-keys")
             # Its own widget, so a narrow terminal drops the other keys and never these.
