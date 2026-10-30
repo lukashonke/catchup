@@ -43,11 +43,11 @@ Screen {
     }
 }
 
-#panes {
+#panes, #t-panes {
     height: 1fr;
 }
 
-#list {
+#list, #t-list {
     width: 1fr;
     height: 1fr;
     max-height: 100%;
@@ -77,7 +77,7 @@ Screen {
     }
 }
 
-#details {
+#details, #t-details {
     width: 1fr;
     min-width: 62;
     height: 1fr;
@@ -89,19 +89,19 @@ Screen {
     & > * {
         height: auto;
     }
-    & > #d-empty {
+    & > #d-empty, & > #t-empty {
         display: none;
         color: $faint;
     }
     & > .-hidden, &.-empty > * {
         display: none;
     }
-    &.-empty > #d-empty {
+    &.-empty > #d-empty, &.-empty > #t-empty {
         display: block;
     }
 }
 
-#d-title {
+#d-title, #t-title {
     color: $bright;
     text-style: bold;
 }
@@ -111,7 +111,11 @@ Screen {
     margin-bottom: 1;
 }
 
-#d-body {
+#t-meta {
+    color: $dim;
+}
+
+#d-body, #t-body {
     margin: 0;
     padding: 0;
     background: $background;
@@ -120,7 +124,7 @@ Screen {
     }
 }
 
-#d-links {
+#d-links, #t-link, #t-due {
     margin-bottom: 1;
 }
 
@@ -169,6 +173,23 @@ Screen {
     margin-bottom: 1;
 }
 
+/* The Todoist tab takes the place of the panes while it is shown. */
+#todoist {
+    display: none;
+    height: 1fr;
+}
+
+#t-status {
+    height: 2;
+    padding: 1 2 0 2;
+    color: $dim;
+}
+
+#t-setup {
+    max-width: 90;
+    padding: 1 2;
+}
+
 #footer {
     height: 1;
     padding: 0 2;
@@ -184,17 +205,17 @@ Screen {
 
 /* Below NARROW_COLUMNS the details pane moves below the list. */
 Screen.-narrow, Screen.-tiny {
-    & #panes {
+    & #panes, & #t-panes {
         layout: vertical;
     }
-    & #list {
+    & #list, & #t-list {
         width: 1fr;
         height: auto;
         max-height: 45%;
         /* All four sides: Textual applies a lone padding-bottom as the whole padding. */
         padding: 1 1 1 1;
     }
-    & #details {
+    & #details, & #t-details {
         width: 1fr;
         min-width: 0;
         border-left: none;

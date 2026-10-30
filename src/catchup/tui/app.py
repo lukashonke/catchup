@@ -6,7 +6,7 @@ import sqlite3
 from collections.abc import Callable
 from datetime import datetime
 from functools import partial
-from typing import ClassVar, TypeGuard
+from typing import ClassVar, Literal, TypeGuard
 
 from textual import events, on, work
 from textual.actions import SkipAction
@@ -28,6 +28,9 @@ from catchup.tui import theme
 from catchup.tui.data import TABS, Snapshot, StoreThread, load
 from catchup.tui.dialogs import KeysHelp, NoteEditor, SnoozePicker
 from catchup.tui.settings import Settings
+from catchup.tui.todoist import FOOTER_KEYS as TODOIST_KEYS
+from catchup.tui.todoist import RED as TODOIST_RED
+from catchup.tui.todoist import TodoistView, help_keys
 from catchup.tui.widgets import (
     Details,
     Filter,
@@ -49,6 +52,10 @@ SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 NARROW_COLUMNS = 110
 TINY_COLUMNS = 62
 _CHANGED = {"done": "Done", "ignored": "Ignored", "open": "Reopened"}
+TODOIST = "todoist"
+Tab = State | Literal["todoist"]
+# The keys that act on inbox items, which do nothing on the Todoist tab.
+_INBOX_ONLY = {"change", "open_link", "undo", "snooze", "note", "filter", "clear_filter"}
 
 # A change takes the store and the item id, and returns the changed item.
 Change = Callable[[Store, int], Item]
@@ -98,7 +105,7 @@ class CatchupApp(App[None]):
         self.config = config
         self._config_mtime = _config_mtime()
         self.store = StoreThread()
-        self.tab: State = "open"
+        self.tab: Tab = "open"
         self.snapshot: Snapshot | None = None
         self.item: Item | None = None
         # Ages and expired snoozes change with time alone, so the minute is part of the poll key.
@@ -123,6 +130,7 @@ class CatchupApp(App[None]):
         with Horizontal(id="panes"):
             yield ItemList(id="list")
             yield Details(id="details")
+        yield TodoistView(id="todoist")
         with Horizontal(id="footer"):
             yield Static(id="footer-keys")
             # Its own widget, so a narrow terminal drops the other keys and never these.
@@ -150,13 +158,21 @@ class CatchupApp(App[None]):
             *([("c", "catch up now")] if self.config.agent_prompt else []),
             ("q", "quit"),
         ]
+        if self.tab == TODOIST:
+            keys = [*TODOIST_KEYS, ("a", self.config.open_label), ("q", "quit")]
         self.query_one("#footer-keys", Static).update(KeyHints(keys))
+        if self.snapshot:
+            self._show_header(self.snapshot)
+        if self.tab == TODOIST and not self.config.todoist:
+            self.call_later(self.show_tab, "open")
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
         # The inbox keys act only on the inbox: not under a dialog or while typing a filter.
         # Textual's own keys, such as tab between fields, and ctrl+c work everywhere.
         inbox = {binding.action.partition("(")[0] for binding in self.BINDINGS} - {"quit"}
         typing = isinstance(self.focused, Input)
+        if action in _INBOX_ONLY and self.tab == TODOIST:
+            return False
         return action not in inbox or not (isinstance(self.screen, ModalScreen) or typing)
 
     def action_close(self) -> None:
@@ -227,7 +243,8 @@ class CatchupApp(App[None]):
             await self.check_agent()
 
     def action_keys(self) -> None:
-        self.push_screen(KeysHelp(self.config.open_label))
+        keys = help_keys(self.config.open_label) if self.tab == TODOIST else None
+        self.push_screen(KeysHelp(self.config.open_label, keys))
 
     def action_settings(self) -> None:
         self.push_screen(Settings(self.config), self._settings_saved)
@@ -237,6 +254,8 @@ class CatchupApp(App[None]):
             return
         self.config = config
         self._show_config()
+        if self.tab == TODOIST:
+            self.query_one(TodoistView).refresh_tasks()
         self.notify("Settings saved.", markup=False)
         await self.check_agent()
 
@@ -269,7 +288,10 @@ class CatchupApp(App[None]):
         if not self.is_running:
             return
         tab = self.tab
-        snapshot = await self.store.run(lambda store: load(store, tab))
+        # The Todoist tab shows no items, but the header still counts them.
+        snapshot = await self.store.run(
+            lambda store: load(store, "open" if tab == TODOIST else tab)
+        )
         if not self.is_running:
             return
         now = utc_now()
@@ -280,7 +302,7 @@ class CatchupApp(App[None]):
 
     def _show_list(self) -> None:
         """Show the rows of the snapshot that match the filter, keeping the selected item."""
-        if self.snapshot is None:
+        if self.snapshot is None or self.tab == TODOIST:
             return
         query = self.query_one(Filter).value.strip()
         waiting = [item for item in self.snapshot.waiting if matches(item, query)]
@@ -302,6 +324,13 @@ class CatchupApp(App[None]):
         self._show_tab_title(f"{snapshot.counts['open']}{new}")
         self._show_agent()
         tabs = []
+        if self.config.todoist:
+            count = self.query_one(TodoistView).count
+            label = " Todoist " if count is None else f" Todoist {count} "
+            on = self.tab == TODOIST
+            style = f"bold {theme.INK} on {TODOIST_RED}" if on else TODOIST_RED
+            tabs.append(Content.styled(label, style).stylize(Style.from_meta({"tab": TODOIST})))
+            tabs.append(Content.styled("│", theme.LINE))
         for state in TABS:
             label = f" {state.capitalize()} {snapshot.counts[state]} "
             style = f"bold {theme.INK} on {theme.ACCENT}" if state == self.tab else theme.DIM
@@ -386,6 +415,8 @@ class CatchupApp(App[None]):
         self.query_one(Details).show(item, history, utc_now())
 
     def on_option_list_option_highlighted(self, event: OptionList.OptionHighlighted) -> None:
+        if not isinstance(event.option_list, ItemList):
+            return
         if self.item is None or event.option.id != str(self.item.id):
             self._show_selected()
 
@@ -397,18 +428,37 @@ class CatchupApp(App[None]):
         elif "link" in meta and self.item and meta["link"] < len(self.item.links):
             self.open_url(self.item.links[meta["link"]].url)
 
-    async def show_tab(self, tab: State) -> None:
-        """Switch to a state tab."""
-        if tab != self.tab:
+    async def show_tab(self, tab: Tab) -> None:
+        """Switch to a state tab or the Todoist tab."""
+        changed = tab != self.tab
+        if changed:
             self.tab = tab
             self.item = None
+            self._watch_seen()
             await self.reload()
-        self.query_one(ItemList).focus()
+        on_todoist = self.tab == TODOIST
+        view = self.query_one(TodoistView)
+        view.display = on_todoist
+        self.query_one("#panes").display = not on_todoist
+        filtered = bool(self.query_one(Filter).value.strip())
+        self.query_one("#filter-bar").display = filtered and not on_todoist
+        self._show_config()
+        if not on_todoist:
+            self.query_one(ItemList).focus()
+            return
+        view.focus_list()
+        if changed:
+            view.refresh_tasks()
+
+    def on_todoist_view_changed(self) -> None:
+        if self.snapshot:
+            self._show_header(self.snapshot)
 
     async def action_tab(self, step: int) -> None:
-        index = TABS.index(self.tab) + step
-        if 0 <= index < len(TABS):
-            await self.show_tab(TABS[index])
+        tabs: tuple[Tab, ...] = (TODOIST, *TABS) if self.config.todoist else TABS
+        index = tabs.index(self.tab) + step if self.tab in tabs else 0
+        if 0 <= index < len(tabs):
+            await self.show_tab(tabs[index])
 
     def action_filter(self) -> None:
         self.query_one("#filter-bar").display = True

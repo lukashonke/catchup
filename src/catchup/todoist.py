@@ -117,7 +117,7 @@ def parse(raw: dict[str, Any]) -> Tasks:
 
 def _task(data: dict[str, Any], project: str, section: str | None) -> Task:
     due = data.get("due") or {}
-    due_date, due_time = _due(due.get("date"))
+    due_date, due_time = parse_due(due.get("date"))
     return Task(
         id=data["id"],
         title=data["content"],
@@ -134,7 +134,7 @@ def _task(data: dict[str, Any], project: str, section: str | None) -> Task:
     )
 
 
-def _due(value: str | None) -> tuple[date | None, time | None]:
+def parse_due(value: str | None) -> tuple[date | None, time | None]:
     """Return the local date and time of a due value: a date, a floating time, or a UTC time."""
     if not value:
         return None, None
