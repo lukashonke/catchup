@@ -87,6 +87,12 @@ catchup snooze ID --until 3h|1d|3d|1w|mon|tomorrow|YYYY-MM-DD [--note TEXT]
 open_command = ["/path/to/my-opener.sh"]
 # The name of that action on the button, in the footer and in notifications.
 open_label = "Open in Codex"
+# The same for the action that opens the item in a new herdr space.
+open_space_command = ["/path/to/my-opener.sh", "--new-window"]
+open_space_label = "Open in Codex, new window"
+# The quick run that fetches an item's context; it gets the prompt and the item on stdin.
+context_command = ["claude", "-p", "--model", "haiku", "--permission-mode", "auto"]
+context_prompt = "Fetch any relevant context for this item ..."
 # The agent run; it is off without a prompt. The command gets the prompt on stdin.
 agent_prompt = "Use the catchup-inbox skill to sync my inbox with Slack and email."
 agent_command = ["claude", "-p", "--permission-mode", "auto"]
@@ -123,12 +129,17 @@ Inside herdr (`HERDR_ENV=1` and `HERDR_TAB_ID` set), the TUI also shows the coun
 
 An item is new when the agent created, reopened or updated it after you last saw it. An item counts as seen when it stays selected for a second, so moving the selection past a row does not count. Seeing an item is not an event and does not change `updated_at`, so it never makes the item look changed to the agent.
 
+### Context
+
+A context is fetched on request, not by the agent run, because most items never need one and a fetch costs a model run. It is a file in `contexts/` next to the database, not a database column: it is a disposable cache, not part of the item's history, and the agent never reads it. Like the agent run, a fetch runs under a supervisor (`python -m catchup.context`) in its own session, so it outlives the TUI. The supervisor stops a fetch after 5 minutes of awake time and writes the answer, or why there is none, into the file. A lock around the files keeps that write after the TUI's own, so a fast fetch cannot be overwritten by its own "fetching" record. A context is out of date when the agent created, reopened or updated the item after the fetch started. Since the store keeps whole seconds, a change within the second the fetch started does not count.
+
 When "Open in Claude" succeeds, the TUI records an `opened` event by you. The details pane shows how long ago you last opened the item, and its row shows an arrow while it is not new.
 
 The mouse and the up and down keys select items. The keys:
 
 - Left and right: the previous and the next state tab.
-- Enter: Open in Claude.
+- Enter: fetch the item's context, or show it full screen once it is ready.
+- a: Open in Claude, in a new herdr tab. A or Ctrl+A: the same in a new herdr space.
 - Ctrl+Enter: open the first link in the browser. The terminal must send Ctrl+Enter as its own key (the kitty keyboard protocol); otherwise it arrives as Enter.
 - Space: Done. Backspace: Ignore. z: the snooze picker. These act only on open and snoozed waiting items.
 - u: undo the latest state change made in this TUI session (done, ignore, snooze, reopen, from keys or buttons). It restores the previous state and snooze date as your change, with the note "undo". The undo history is in memory and ends with the session.
