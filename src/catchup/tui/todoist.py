@@ -127,7 +127,8 @@ class TaskList(OptionList):
                 if options:
                     options.append(Option(Text(""), disabled=True))
                 count = sum(other.project == task.project for other in tasks)
-                options.append(Option(_section(task.project.upper(), str(count)), disabled=True))
+                header = _section(task.project.upper(), str(count), mark=False)
+                options.append(Option(header, disabled=True))
             options.append(Option(_row(task, now), id=task.id))
         if not tasks:
             options.append(Option(Text(empty, style=theme.FAINT), disabled=True))

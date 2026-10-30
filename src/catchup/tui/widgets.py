@@ -134,13 +134,16 @@ def _row(item: Item, now: datetime, context: Context | None = None, frame: str =
     return grid
 
 
-def _section(left: str, right: str) -> Table:
+def _section(left: str, right: str, mark: bool = True) -> Table:
     grid = Table.grid(expand=True)
     grid.add_column(ratio=1)
     grid.add_column(justify="right")
+    cells = [Text(left, style=f"bold {theme.DIM}"), Text(right, style=theme.DIM)]
     # Room for the rows' context mark, so the count lines up with their ages.
-    grid.add_column(width=2)
-    grid.add_row(Text(left, style=f"bold {theme.DIM}"), Text(right, style=theme.DIM), "")
+    if mark:
+        grid.add_column(width=2)
+        cells.append(Text(""))
+    grid.add_row(*cells)
     return grid
 
 

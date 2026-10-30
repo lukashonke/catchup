@@ -58,6 +58,8 @@ async def test_the_tab_lists_the_tasks_by_project_inbox_first(db: Path, td: Stan
         assert rows(app) == [None, "i1", "i2", None, None, "w1"]
         lines = text(app, "#t-list").splitlines()
         assert lines[0].split() == ["INBOX", "2"]
+        # The count lines up with the due dates; text() strips the first line's indent.
+        assert len(lines[4]) == len(lines[5])
         assert lines[1].split() == ["●", "Pay", "the", "rent", "@home", "@money", "2d", "overdue"]
         assert lines[2].split() == ["Water", "the", "plants", "↻", "15:00"]
         assert lines[4].split() == ["WORK", "1"]
