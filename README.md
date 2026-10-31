@@ -45,6 +45,8 @@ cp -r skills/catchup-inbox ~/.claude/skills/
 
 Other agents can read the same file as instructions.
 
+The guide does not say where to look for work: that depends on your sources. [`examples/catchup/SKILL.md`](examples/catchup/SKILL.md) is an example skill that reads Slack and Gmail, decides what waits on you, and closes what is finished. Copy it to `~/.claude/skills/catchup/` and adapt the marked spots to your channels, noise senders, code review and agent commands.
+
 A short run looks like this:
 
 ```sh
