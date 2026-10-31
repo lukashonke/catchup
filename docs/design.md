@@ -92,7 +92,7 @@ open_label = "Open in Codex"
 open_space_command = ["/path/to/my-opener.sh", "--new-window"]
 open_space_label = "Open in Codex, new window"
 # The quick run that fetches an item's context; it gets the prompt and the item on stdin.
-context_command = ["claude", "-p", "--model", "haiku", "--permission-mode", "auto"]
+context_command = ["claude", "-p", "--model", "haiku", "--permission-mode", "auto", "--output-format", "stream-json", "--verbose"]
 context_prompt = "Fetch any relevant context for this item ..."
 # The agent run; it is off without a prompt. The command gets the prompt on stdin.
 agent_prompt = "Use the catchup-inbox skill to sync my inbox with Slack and email."
@@ -136,7 +136,7 @@ An item is new when the agent created, reopened or updated it after you last saw
 
 ### Context
 
-A context is fetched on request, not by the agent run, because most items never need one and a fetch costs a model run. It is a file in `contexts/` next to the database, not a database column: it is a disposable cache, not part of the item's history, and the agent never reads it. A file is named by its key: the item id, or `todoist-` and the task id for a Todoist task. A task has no history, so its context never goes out of date. Like the agent run, a fetch runs under a supervisor (`python -m catchup.context`) in its own session, so it outlives the TUI. The supervisor stops a fetch after 5 minutes of awake time and writes the answer, or why there is none, into the file. A lock around the files keeps that write after the TUI's own, so a fast fetch cannot be overwritten by its own "fetching" record. A context is out of date when the agent created, reopened or updated the item after the fetch started. Since the store keeps whole seconds, a change within the second the fetch started does not count.
+A context is fetched on request, not by the agent run, because most items never need one and a fetch costs a model run. It is a file in `contexts/` next to the database, not a database column: it is a disposable cache, not part of the item's history, and the agent never reads it. A file is named by its key: the item id, or `todoist-` and the task id for a Todoist task. A task has no history, so its context never goes out of date. Like the agent run, a fetch runs under a supervisor (`python -m catchup.context`) in its own session, so it outlives the TUI. The supervisor stops a fetch after 5 minutes of awake time and writes the answer, or why there is none, into the file. A lock around the files keeps that write after the TUI's own, so a fast fetch cannot be overwritten by its own "fetching" record. While it runs, the supervisor reads Claude Code's stream-json and writes the latest tool calls and texts into the file, and the TUI reads the file every half second while a fetch runs. The finished file keeps only the answer; the steps stay in `context.log`. Output that is not stream-json is the answer as it is, so any command still works. A context is out of date when the agent created, reopened or updated the item after the fetch started. Since the store keeps whole seconds, a change within the second the fetch started does not count.
 
 When "Open in Claude" succeeds, the TUI records an `opened` event by you. The details pane shows how long ago you last opened the item, and its row shows an arrow while it is not new.
 

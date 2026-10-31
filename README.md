@@ -109,16 +109,17 @@ When `new-window` gets the command as more than one argument, tmux runs it direc
 
 ## Context
 
-Enter on an item, or on a Todoist task, fetches its context in the background: a quick separate agent run reads the item's sources and summarizes what you need to catch up on it. While it runs, the row shows a spinner; when it is ready, a ◆. Enter on that row shows the context in a popup, where `r` fetches it again and `y` copies it. A ◇ means the agent changed the item after the fetch, so the context may be out of date. A ✕ means the fetch failed; Enter shows why.
+Enter on an item, or on a Todoist task, fetches its context in the background: a quick separate agent run reads the item's sources and summarizes what you need to catch up on it. While it runs, the row shows a spinner, and the details pane shows each tool call and what Claude writes between them. When it is ready, the row shows a ◆ and the details pane the context. Enter shows it in a popup, also while it is fetched, where `r` fetches it again and `y` copies it. A ◇ means the agent changed the item after the fetch, so the context may be out of date. A ✕ means the fetch failed; Enter shows why.
 
 ```toml
-context_command = ["claude", "-p", "--model", "haiku", "--permission-mode", "auto"]  # the default
+# The default; stream-json shows the steps while it runs.
+context_command = ["claude", "-p", "--model", "haiku", "--permission-mode", "auto", "--output-format", "stream-json", "--verbose"]
 context_prompt = "Fetch any relevant context for this item ..."  # the default asks to only read
 ```
 
-- The command runs in your home directory with the prompt on stdin, followed by the item: its title, body, links and your notes. What it prints is the context, as Markdown.
+- The command runs in your home directory with the prompt on stdin, followed by the item: its title, body, links and your notes. For a Todoist task, it also gets the project, due date and labels, and the `td` commands that read the task and its comments. If the command prints Claude Code's stream-json, the result is the context; otherwise everything it prints is. The context is Markdown. Claude does not stream its thinking in this mode, so the steps show only the tool calls and the text.
 - At most 3 fetches run at once. A fetch that takes longer than 5 minutes is stopped. Time while the computer sleeps does not count.
-- Each context is a file in `contexts/` next to the database, and `context.log` there holds the start and end of every fetch and what the command wrote to stderr.
+- Each context is a file in `contexts/` next to the database, and `context.log` there holds the start and end of every fetch, its steps, and what the command wrote to stderr.
 
 ## Agent runs
 
