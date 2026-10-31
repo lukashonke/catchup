@@ -12,7 +12,18 @@ from catchup import CatchupError
 from catchup.when import parse_every
 
 DEFAULT_AGENT_COMMAND = ("claude", "-p", "--permission-mode", "auto")
-DEFAULT_CONTEXT_COMMAND = ("claude", "-p", "--model", "haiku", "--permission-mode", "auto")
+# stream-json, so the context shows each step while it is fetched; --verbose is required with -p.
+DEFAULT_CONTEXT_COMMAND = (
+    "claude",
+    "-p",
+    "--model",
+    "haiku",
+    "--permission-mode",
+    "auto",
+    "--output-format",
+    "stream-json",
+    "--verbose",
+)
 DEFAULT_CONTEXT_PROMPT = (
     "Fetch any relevant context for this item from the connected tools and MCPs, and summarize"
     " it. The goal is to catch the user up on this one item. Only read: do not post, send or"

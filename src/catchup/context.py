@@ -6,6 +6,10 @@ a row, since it is a disposable cache and not part of the item's history. Like t
 fetch runs under a supervisor (`python -m catchup.context`) in its own session, so it outlives
 the TUI: the supervisor stops a fetch past TIME_LIMIT, then writes the answer, or why there is
 none, into the file. A lock around the files keeps that write after the TUI's own.
+
+When the command prints Claude Code's stream-json, the supervisor writes each tool call and
+each text into the file while the fetch runs, and keeps only the answer at the end; the log
+keeps every step. Any other command's output is the answer as it is.
 """
 
 import fcntl
@@ -16,12 +20,13 @@ import signal
 import subprocess
 import sys
 import tempfile
-from collections.abc import Iterator, Mapping, Sequence
+import threading
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from catchup import CatchupError
 from catchup.agent import process_alive, stamp, stop_group
@@ -34,8 +39,21 @@ MAX_FETCHES = 3
 _STOP_GRACE_SECONDS = 5
 # The end of a failed fetch's output that the context view shows.
 _ERROR_LINES = 20
+# The steps a context file keeps while it is fetched, and how long one may be.
+_STEPS = 30
+_STEP_LENGTH = 160
+# The input that says most about a tool call, in this order; else its first text input.
+_TOOL_INPUTS = ("command", "query", "pattern", "url", "file_path", "skill", "description")
 
 ContextState = Literal["fetching", "ready", "failed"]
+
+
+@dataclass(frozen=True)
+class Step:
+    """One step of a fetch: a tool call, or text the agent wrote between them."""
+
+    kind: Literal["tool", "text"]
+    text: str
 
 
 @dataclass(frozen=True)
@@ -47,6 +65,8 @@ class Context:
     started_at: datetime
     # The Markdown answer when ready, the reason when failed, empty while fetching.
     text: str = ""
+    # The latest steps, while fetching.
+    steps: tuple[Step, ...] = ()
 
     def stale(self, item: Item) -> bool:
         """Return whether the agent changed the item after this fetch started."""
@@ -134,11 +154,15 @@ def prompt_for(item: Item, notes: Sequence[Event], config: Config) -> str:
 def supervise(key: str, argv: list[str], limit: timedelta = TIME_LIMIT) -> int:
     """Run the fetch, stop it past `limit`, store the answer or the reason, return the exit code."""
     started = utc_now()
-    with tempfile.TemporaryFile() as out, log_path().open("a", encoding="utf-8") as log:
+    with log_path().open("a", encoding="utf-8") as log:
         print(f"--- {stamp()} {key} started", file=log, flush=True)
         # Its own process group, so stopping it also stops the tools it started.
-        child = subprocess.Popen(argv, stdout=out, stderr=log, start_new_session=True)
+        child = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=log, start_new_session=True)
         signal.signal(signal.SIGTERM, lambda *_: stop_group(child.pid, signal.SIGTERM))
+        assert child.stdout is not None
+        output = _Output(key, log)
+        reader = threading.Thread(target=output.read, args=(child.stdout,), daemon=True)
+        reader.start()
         try:
             code = child.wait(timeout=limit.total_seconds())
         except subprocess.TimeoutExpired:
@@ -149,15 +173,18 @@ def supervise(key: str, argv: list[str], limit: timedelta = TIME_LIMIT) -> int:
                 stop_group(child.pid, signal.SIGKILL)
                 child.wait()
             code = None
-        out.seek(0)
-        text = out.read().decode(errors="replace").strip()
-        if code == 0 and text:
+        # A tool the fetch left running in the background may hold the output open.
+        reader.join(timeout=_STOP_GRACE_SECONDS)
+        text = output.answer()
+        if code == 0 and text and not output.failed:
             record = {"state": "ready", "text": text}
         else:
             if code is None:
                 reason = f"It took longer than {int(limit.total_seconds() // 60)} minutes."
-            elif code == 0:
+            elif code == 0 and not text:
                 reason = "It printed nothing."
+            elif code == 0:
+                reason = "It reported an error."
             else:
                 reason = f"It exited with code {code}."
             tail = "\n".join(text.splitlines()[-_ERROR_LINES:])
@@ -170,6 +197,86 @@ def supervise(key: str, argv: list[str], limit: timedelta = TIME_LIMIT) -> int:
         if _raw(path).get("pid") == os.getpid():
             _write(directory, key, {**record, "started_at": started.isoformat()})
     return 1 if code is None else code
+
+
+class _Output:
+    """What a fetch prints: Claude Code's stream of steps and its answer, or plain text."""
+
+    def __init__(self, key: str, log: Any) -> None:
+        self.key = key
+        self.log = log
+        self.steps: list[Step] = []
+        self.result: str | None = None
+        self.failed = False
+        self.lines: list[str] = []
+
+    def read(self, stream: Iterable[bytes]) -> None:
+        for raw in stream:
+            line = raw.decode(errors="replace")
+            event = _event(line)
+            if event is None:
+                self.lines.append(line)
+            elif event["type"] == "result":
+                self.result = str(event.get("result") or "")
+                self.failed = bool(event.get("is_error"))
+            elif steps := _steps(event):
+                self.steps = (self.steps + steps)[-_STEPS:]
+                for step in steps:
+                    print(f"    {step.kind}: {step.text}", file=self.log, flush=True)
+                self._show()
+
+    def answer(self) -> str:
+        """Return the answer: the stream's result, else everything that was printed."""
+        return (self.result if self.result is not None else "".join(self.lines)).strip()
+
+    def _show(self) -> None:
+        steps = [{"kind": step.kind, "text": step.text} for step in self.steps]
+        with _locked() as directory:
+            data = _raw(directory / f"{self.key}.json")
+            # Only into the fetch this supervisor started, as for the answer.
+            if data.get("pid") == os.getpid():
+                _write(directory, self.key, {**data, "steps": steps})
+
+
+def _event(line: str) -> dict[str, Any] | None:
+    """Return the stream-json event on the line, or None when the line is something else."""
+    try:
+        event = json.loads(line)
+    except ValueError:
+        return None
+    return event if isinstance(event, dict) and isinstance(event.get("type"), str) else None
+
+
+def _steps(event: dict[str, Any]) -> list[Step]:
+    message = event.get("message")
+    if event["type"] != "assistant" or not isinstance(message, dict):
+        return []
+    steps = []
+    for block in message.get("content") or []:
+        if not isinstance(block, dict):
+            continue
+        if block.get("type") == "text" and (text := " ".join(str(block.get("text")).split())):
+            steps.append(Step("text", _cut(text)))
+        elif block.get("type") == "tool_use":
+            steps.append(Step("tool", _cut(_tool(str(block.get("name")), block.get("input")))))
+    return steps
+
+
+def _tool(name: str, args: object) -> str:
+    """Return a tool call as a line, such as `Slack · slack_search_public  retry limit`."""
+    # An MCP tool is named mcp__<server>__<tool>, and the server says the most.
+    parts = name.split("__")
+    if len(parts) == 3 and parts[0] == "mcp":
+        name = f"{parts[1].removeprefix('claude_ai_').replace('_', ' ')} · {parts[2]}"
+    if not isinstance(args, dict):
+        return name
+    texts = [args.get(key) for key in _TOOL_INPUTS] + list(args.values())
+    detail = next((text for text in texts if isinstance(text, str) and text.strip()), "")
+    return f"{name}  {' '.join(detail.split())}".strip()
+
+
+def _cut(text: str) -> str:
+    return text if len(text) <= _STEP_LENGTH else text[: _STEP_LENGTH - 1] + "…"
 
 
 @contextmanager
@@ -206,7 +313,18 @@ def _read(path: Path) -> Context | None:
     if state == "fetching" and not process_alive(int(data.get("pid") or 0)):
         # The supervisor ended without writing an answer, for example when it was killed.
         return Context(path.stem, "failed", started_at, f"The fetch stopped. See {log_path()}.")
-    return Context(path.stem, state, started_at, str(data.get("text") or ""))
+    steps = data.get("steps") if isinstance(data.get("steps"), list) else []
+    return Context(
+        path.stem,
+        state,
+        started_at,
+        str(data.get("text") or ""),
+        tuple(
+            Step(step["kind"], str(step.get("text")))
+            for step in steps
+            if isinstance(step, dict) and step.get("kind") in ("tool", "text")
+        ),
+    )
 
 
 if __name__ == "__main__":

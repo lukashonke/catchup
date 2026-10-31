@@ -91,3 +91,56 @@ def test_a_fetch_past_the_time_limit_is_stopped(item: Item) -> None:
     assert time.monotonic() - began < 5
     failed = context.read_all()[str(item.id)]
     assert (failed.state, failed.text.split(".")[0]) == ("failed", "It took longer than 0 minutes")
+
+
+def stream(path: Path, *events: dict[str, object]) -> Path:
+    path.write_text("".join(json.dumps(event) + "\n" for event in events))
+    return path
+
+
+def test_a_stream_shows_its_steps_while_fetching_then_keeps_only_the_answer(
+    item: Item, tmp_path: Path
+) -> None:
+    tool = {"type": "tool_use", "name": "mcp__claude_ai_Slack__slack_search_public"}
+    bash = {"type": "tool_use", "name": "Bash"}
+    steps = stream(
+        tmp_path / "steps.jsonl",
+        {"type": "system", "subtype": "init"},
+        {
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {"type": "thinking", "thinking": ""},
+                    {"type": "text", "text": "Searching   Slack.\n"},
+                    {**tool, "input": {"channel": "C1", "query": "retry limit"}},
+                    {**bash, "input": {"description": "View", "command": "td task view id:1"}},
+                ]
+            },
+        },
+    )
+    result = {"type": "result", "is_error": False, "result": "## Ken\n\nWaits on you."}
+    answer = stream(tmp_path / "answer.jsonl", result)
+    context.fetch(str(item.id), item, [], config(f"cat {steps}; sleep 2; cat {answer}"))
+
+    deadline = time.monotonic() + 10
+    while not (fetching := context.read_all()[str(item.id)]).steps:
+        assert time.monotonic() < deadline, "no steps"
+        time.sleep(0.05)
+    assert fetching.state == "fetching"
+    assert fetching.steps == (
+        context.Step("text", "Searching Slack."),
+        context.Step("tool", "Slack · slack_search_public  retry limit"),
+        context.Step("tool", "Bash  td task view id:1"),
+    )
+    ready = wait_for(str(item.id), "ready")
+    assert (ready.text, ready.steps) == ("## Ken\n\nWaits on you.", ())
+    assert "tool: Slack · slack_search_public  retry limit" in context.log_path().read_text()
+
+
+def test_a_stream_that_reports_an_error_fails(item: Item, tmp_path: Path) -> None:
+    result = {"type": "result", "is_error": True, "result": "Credit balance is too low"}
+    answer = stream(tmp_path / "answer.jsonl", result)
+    context.fetch(str(item.id), item, [], config(f"cat {answer}"))
+    failed = wait_for(str(item.id), "failed")
+    assert failed.text.startswith("It reported an error.")
+    assert failed.text.endswith("Credit balance is too low")
