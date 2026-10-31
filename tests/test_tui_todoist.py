@@ -194,7 +194,7 @@ async def test_enter_fetches_the_context_of_the_task_then_shows_it(
     contexts: dict[str, context.Context] = {}
     monkeypatch.setattr(
         "catchup.context.fetch",
-        lambda key, item, notes, config: fetched.append((key, item.prompt, notes)),
+        lambda key, item, notes, config: fetched.append((key, item.body, notes)),
     )
     monkeypatch.setattr("catchup.context.read_all", lambda: dict(contexts))
     app = CatchupApp(Config(todoist=True, todoist_command=td.command))
@@ -202,9 +202,15 @@ async def test_enter_fetches_the_context_of_the_task_then_shows_it(
         await todoist_tab(app, pilot)
         await pilot.press("enter")
         await app.workers.wait_for_complete()
-        [(key, prompt, notes)] = fetched
+        [(key, body, notes)] = fetched
         assert (key, notes) == ("todoist-i1", [])
-        assert prompt.startswith("Pay the rent\n\nTransfer **before** noon.")
+        overdue = date.today() - timedelta(days=2)
+        assert body == (
+            "Transfer **before** noon.\n\n"
+            f"Todoist task id:i1 · project Inbox · p1 · due {overdue:%a} {overdue.day} {overdue:%b}"
+            " · labels @home @money\n\n"
+            "Read the task and its comments with `td task view id:i1` and `td comment list id:i1`."
+        )
 
         contexts[key] = context.Context(key, "ready", utc_now(), "## The rent\n\nDue today.")
         await pilot.pause(2.5)  # The next poll reads it.
@@ -213,10 +219,11 @@ async def test_enter_fetches_the_context_of_the_task_then_shows_it(
         # The project count lines up with the due dates, left of the mark.
         assert lines[4].split() == ["WORK", "1"]
         assert len(lines[4]) == lines[5].index("today") + len("today")
+        assert app.query_one("#t-context .cx-body", Markdown).source.startswith("## The rent")
         await pilot.press("enter")
         await pilot.pause()
         assert isinstance(app.screen, ContextView)
-        assert app.screen.query_one("#c-body", Markdown).source.startswith("## The rent")
+        assert app.screen.query_one(".cx-body", Markdown).source.startswith("## The rent")
 
 
 async def test_inbox_keys_do_nothing_on_the_todoist_tab(db: Path, td: StandIn) -> None:

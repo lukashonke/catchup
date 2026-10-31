@@ -33,7 +33,7 @@ from catchup.store import Item, utc_now
 from catchup.todoist import Task
 from catchup.tui import theme
 from catchup.tui.dialogs import SnoozePicker
-from catchup.tui.widgets import _context_mark, _Line, _section
+from catchup.tui.widgets import ContextPanel, _context_mark, _Line, _section
 
 REFRESH_SECONDS = 60.0
 RED = "#e44332"
@@ -183,6 +183,7 @@ class TaskDetails(VerticalScroll):
         yield Static(id="t-due")
         yield Markdown(id="t-body")
         yield Static(id="t-link")
+        yield ContextPanel(id="t-context")
         yield Static("Select a task.", id="t-empty")
 
     def show(self, task: Task | None, now: datetime) -> None:
@@ -410,6 +411,7 @@ class TodoistView(Vertical, can_focus=True):
         selected = option.id if option else None
         self.selected = next((t for t in self.tasks or [] if t.id == selected), None)
         self.query_one(TaskDetails).show(self.selected, utc_now())
+        self._show_context()
 
     def on_option_list_option_highlighted(self, event: OptionList.OptionHighlighted) -> None:
         # The inbox handles the highlights of its own list; this one is the tab's.
@@ -437,11 +439,17 @@ class TodoistView(Vertical, can_focus=True):
 
     def action_context(self) -> None:
         if task := self.selected:
-            self.app.open_context(context_key(task), as_item(task))
+            self.app.open_context(context_key(task), context_item(task))
 
     def show_contexts(self, contexts: dict[str, Context], frame: str) -> None:
-        """Show the context marks of the tasks."""
+        """Show the context marks of the tasks, and the context of the selected one."""
         self.query_one(TaskList).show_contexts(contexts, frame)
+        self._show_context()
+
+    def _show_context(self) -> None:
+        task_list = self.query_one(TaskList)
+        found = task_list.contexts.get(context_key(self.selected)) if self.selected else None
+        self.query_one(ContextPanel).show(found, task_list.frame)
 
     def action_browse(self) -> None:
         if self.selected and self.selected.url:
@@ -524,6 +532,22 @@ class TodoistView(Vertical, can_focus=True):
         if self.app.is_running:
             self._show()
             self.refresh_tasks()
+
+
+def context_item(task: Task) -> Item:
+    """Return the task as the item its context is fetched for, with what td can tell about it."""
+    place = f"{task.project} › {task.section}" if task.section else task.project
+    facts = [f"Todoist task id:{task.id}", f"project {place}", f"p{task.p}"]
+    if task.due_date:
+        facts.append(f"due {_when(task)}" + (f", {task.due_string}" if task.recurring else ""))
+    if task.labels:
+        facts.append("labels " + " ".join(f"@{label}" for label in task.labels))
+    read = (
+        f"Read the task and its comments with `td task view id:{task.id}`"
+        f" and `td comment list id:{task.id}`."
+    )
+    body = "\n\n".join(part for part in (task.description, " · ".join(facts), read) if part)
+    return dataclasses.replace(as_item(task), body=body)
 
 
 def as_item(task: Task) -> Item:
