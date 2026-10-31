@@ -652,21 +652,34 @@ async def test_enter_fetches_the_context_then_shows_it(
         await app.workers.wait_for_complete()
         assert fetched == [item_id]
 
-        contexts[item_id] = context.Context(item_id, "fetching", utc_now())
+        step = context.Step("tool", "Slack · slack_search_public  retry limit")
+        contexts[item_id] = context.Context(item_id, "fetching", utc_now(), steps=(step,))
         await pilot.pause(2.5)  # The next poll reads it.
         assert text(app, "#list").splitlines()[1][-1] in "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
-        await pilot.press("enter")
-        assert fetched == [item_id]
-
-        contexts[item_id] = context.Context(
-            item_id, "ready", utc_now(), "## Ken waits\n\nOn **you**."
-        )
-        await pilot.pause(2.5)
-        assert text(app, "#list").splitlines()[1].endswith("◆")
+        assert "› Slack · slack_search_public  retry limit" in text(app, "#d-context .cx-status")
         await pilot.press("enter")
         await pilot.pause()
         assert isinstance(app.screen, ContextView)
-        assert app.screen.query_one("#c-body", Markdown).source.startswith("## Ken waits")
+        assert "fetching the context…" in text(app, "#c-panel .cx-status")
+        assert text(app, "#c-keys") == "esc close"
+        await pilot.press("r")
+        assert isinstance(app.screen, ContextView)
+        assert fetched == [item_id]
+
+        # The open popup shows the answer as soon as the fetch ends.
+        contexts[item_id] = context.Context(
+            item_id, "ready", utc_now(), "## Ken waits\n\nOn **you**."
+        )
+        await pilot.pause(1)
+        assert app.screen.query_one(".cx-body", Markdown).source.startswith("## Ken waits")
+        await pilot.press("escape")
+        await pilot.pause()
+        assert text(app, "#list").splitlines()[1].endswith("◆")
+        body = app.query_one("#d-context .cx-body", Markdown)
+        assert body.display and body.source.startswith("## Ken waits")
+        await pilot.press("enter")
+        await pilot.pause()
+        assert isinstance(app.screen, ContextView)
         await pilot.press("r")
         await app.workers.wait_for_complete()
         assert not isinstance(app.screen, ContextView)

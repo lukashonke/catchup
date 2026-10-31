@@ -166,6 +166,32 @@ Screen {
     text-style: bold;
 }
 
+ContextPanel {
+    height: auto;
+    margin-bottom: 1;
+    & > * {
+        height: auto;
+    }
+    & > .cx-body {
+        margin: 0;
+        padding: 0;
+        background: $background;
+        & MarkdownParagraph {
+            margin: 0 0 1 0;
+        }
+        & MarkdownHeader {
+            margin: 1 0 1 0;
+            color: $bright;
+        }
+        & > MarkdownHeader:first-child {
+            margin-top: 0;
+        }
+        & > *:last-child {
+            margin-bottom: 0;
+        }
+    }
+}
+
 #d-prompt {
     color: $dim;
     border-left: solid $line;
@@ -414,23 +440,11 @@ ContextView {
             color: $dim;
             margin-bottom: 1;
         }
-        & > #c-body {
-            margin: 0;
-            padding: 0;
-            background: $panel;
-            & MarkdownParagraph {
-                margin: 0 0 1 0;
-            }
-            & MarkdownHeader {
-                margin: 1 0 1 0;
-                color: $bright;
-            }
-            & > MarkdownHeader:first-child {
-                margin-top: 0;
-            }
-        }
-        & > #c-error {
+        & > #c-panel {
             margin-bottom: 1;
+            & > .cx-body {
+                background: $panel;
+            }
         }
     }
     & > #c-keys {

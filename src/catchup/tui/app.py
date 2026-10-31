@@ -32,6 +32,7 @@ from catchup.tui.todoist import FOOTER_KEYS as TODOIST_KEYS
 from catchup.tui.todoist import RED as TODOIST_RED
 from catchup.tui.todoist import TodoistView, help_keys
 from catchup.tui.widgets import (
+    ContextPanel,
     Details,
     Filter,
     ItemList,
@@ -49,6 +50,8 @@ AGENT_CHECK_SECONDS = 30.0
 AGENT_POLL_SECONDS = 1.0
 SPIN_SECONDS = 0.1
 SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+# While a context is fetched, its file is read every this many spinner frames.
+CONTEXT_READ_SPINS = 5
 NARROW_COLUMNS = 110
 TINY_COLUMNS = 62
 _CHANGED = {"done": "Done", "ignored": "Ignored", "open": "Reopened"}
@@ -384,12 +387,24 @@ class CatchupApp(App[None]):
         if self.agent_state.running:
             self._show_agent()
         if fetching:
+            # Read the steps more often than the poll does, so they show as they come.
+            if self._spin % CONTEXT_READ_SPINS == 0:
+                self._read_contexts()
             self._show_contexts()
 
     def _show_contexts(self) -> None:
         frame = SPINNER[self._spin % len(SPINNER)]
         self.query_one(ItemList).show_contexts(self.contexts, frame)
         self.query_one(TodoistView).show_contexts(self.contexts, frame)
+        self._show_item_context()
+        for screen in self.screen_stack:
+            if isinstance(screen, ContextView) and (found := self.contexts.get(screen.key)):
+                screen.show_context(found, frame)
+
+    def _show_item_context(self) -> None:
+        found = self.contexts.get(str(self.item.id)) if self.item else None
+        frame = SPINNER[self._spin % len(SPINNER)]
+        self.query_one(Details).query_one(ContextPanel).show(found, frame, self.item)
 
     def _read_contexts(self) -> None:
         try:
@@ -449,6 +464,7 @@ class CatchupApp(App[None]):
             if not self.is_running:  # Shutting down; see reload().
                 return
         self.query_one(Details).show(item, history, utc_now())
+        self._show_item_context()
 
     def on_option_list_option_highlighted(self, event: OptionList.OptionHighlighted) -> None:
         if not isinstance(event.option_list, ItemList):
@@ -564,10 +580,10 @@ class CatchupApp(App[None]):
         found = self.contexts.get(key)
         if found is None:
             self._fetch_context(key, item)
-        elif found.state == "fetching":
-            self.notify("Still fetching the context.", title=item.title, markup=False)
         else:
-            self.push_screen(ContextView(item, found), partial(self._context_closed, key, item))
+            frame = SPINNER[self._spin % len(SPINNER)]
+            view = ContextView(key, item, found, frame)
+            self.push_screen(view, partial(self._context_closed, key, item))
 
     def _context_closed(self, key: str, item: Item, choice: str | None) -> None:
         if choice == "fetch":

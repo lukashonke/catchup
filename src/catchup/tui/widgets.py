@@ -9,8 +9,9 @@ from rich.table import Table
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, VerticalScroll
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.content import Content
+from textual.css.query import NoMatches
 from textual.message import Message
 from textual.style import Style
 from textual.widgets import Button, Input, Label, Markdown, OptionList, Static
@@ -24,6 +25,8 @@ from catchup.when import format_age
 
 _MARKERS = {"urgent": "!", "low": "↓"}
 _LINK_LABEL_LENGTH = 40
+# The steps of a fetch that a context shows while it runs.
+_SHOWN_STEPS = 8
 _EMPTY = {
     "open": "Nothing is waiting on you.",
     "snoozed": "Nothing snoozed.",
@@ -261,6 +264,7 @@ class Details(VerticalScroll):
                 yield Button("3d", id="snooze-3d", classes="small", compact=True)
                 yield Button("Mon", id="snooze-mon", classes="small", compact=True)
                 yield Button("Ignore", id="ignore", compact=True)
+        yield ContextPanel(id="d-context")
         yield Static(id="d-prompt-label", classes="label")
         yield Static(id="d-prompt")
         yield Static("HISTORY", id="d-history-label", classes="label")
@@ -293,6 +297,73 @@ class Details(VerticalScroll):
         self.query_one("#d-prompt-label", Static).update(label)
         self.query_one("#d-prompt", Static).update(Content(prompt_of(item)))
         self.query_one("#d-history", Static).update(_history(events))
+
+
+class ContextPanel(Vertical):
+    """A context: the latest steps while it is fetched, then the answer, or why it failed."""
+
+    def __init__(self, label: bool = True, id: str | None = None) -> None:
+        super().__init__(id=id)
+        self.label = label
+        self._shown: tuple[Context | None, str, Item | None] = (None, "", None)
+
+    def compose(self) -> ComposeResult:
+        if self.label:
+            yield Static(classes="label cx-label")
+        yield Static(classes="cx-status")
+        yield Markdown(classes="cx-body")
+
+    def on_mount(self) -> None:
+        self.show(*self._shown)
+
+    def show(self, context: Context | None, frame: str, item: Item | None = None) -> None:
+        """Show `context`, or nothing when there is none; `item` tells whether it is stale."""
+        self._shown = (context, frame, item)
+        self.display = context is not None
+        if context is None:
+            return
+        try:
+            status = self.query_one(".cx-status", Static)
+            body = self.query_one(".cx-body", Markdown)
+        except NoMatches:
+            return  # Not composed yet; on_mount shows it.
+        if self.label:
+            label = Content.assemble("CONTEXT  ", context_meta(context, item))
+            self.query_one(".cx-label", Static).update(label)
+        status.display = context.state != "ready"
+        body.display = context.state == "ready"
+        if context.state == "ready":
+            if body.source != context.text:
+                body.update(context.text)
+        elif context.state == "failed":
+            # Fetched from other people's messages, so a failure shows as text, not Markdown.
+            status.update(Content(context.text))
+        else:
+            status.update(_progress(context, frame))
+
+
+def context_meta(context: Context, item: Item | None) -> Content:
+    """Return when the context was fetched, and whether it failed or may be out of date."""
+    if context.state == "fetching":
+        return Content.styled(f"started {day_time(context.started_at)}", theme.DIM)
+    when = f"fetched {day_time(context.started_at)}"
+    if context.state == "failed":
+        return Content.assemble(("the fetch failed", theme.URGENT), (f" · {when}", theme.DIM))
+    if item and context.stale(item):
+        return Content.assemble(
+            (when, theme.DIM), ("  · the agent changed the item since", theme.ACCENT)
+        )
+    return Content.styled(when, theme.DIM)
+
+
+def _progress(context: Context, frame: str) -> Content:
+    lines = [Content.styled(f"{frame} fetching the context…", theme.ACCENT)]
+    for step in context.steps[-_SHOWN_STEPS:]:
+        if step.kind == "tool":
+            lines.append(Content.assemble(("› ", theme.FAINT), (step.text, theme.FOREGROUND)))
+        else:
+            lines.append(Content.styled(step.text, f"italic {theme.DIM}"))
+    return Content("\n").join(lines)
 
 
 def _meta(item: Item, now: datetime) -> Content:

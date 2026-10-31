@@ -11,15 +11,16 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical, VerticalScroll
 from textual.content import Content
+from textual.css.query import NoMatches
 from textual.screen import ModalScreen
-from textual.widgets import Input, Markdown, OptionList, Static, TextArea
+from textual.widgets import Input, OptionList, Static, TextArea
 from textual.widgets.option_list import Option
 
 from catchup import CatchupError
 from catchup.context import Context
 from catchup.store import Item, utc_now
 from catchup.tui import theme
-from catchup.tui.widgets import day_time
+from catchup.tui.widgets import ContextPanel, context_meta, day_time
 from catchup.when import parse_until
 
 SNOOZE_CHOICES = (
@@ -156,7 +157,10 @@ class KeysHelp(ModalScreen[None]):
 
 
 class ContextView(ModalScreen[str | None]):
-    """An item's context, in a popup; dismiss with "fetch" to fetch it again, else None."""
+    """An item's context, in a popup; dismiss with "fetch" to fetch it again, else None.
+
+    While the context is fetched, the app passes each change to `show_context`.
+    """
 
     BINDINGS: ClassVar = [
         Binding("escape,q,enter", "dismiss(None)", "Close", show=False),
@@ -164,32 +168,44 @@ class ContextView(ModalScreen[str | None]):
         Binding("y", "copy", "Copy", show=False),
     ]
 
-    def __init__(self, item: Item, context: Context) -> None:
+    def __init__(self, key: str, item: Item, context: Context, frame: str = "") -> None:
         super().__init__()
+        self.key = key
         self.item = item
         self.context = context
+        self.frame = frame
 
     def compose(self) -> ComposeResult:
-        context = self.context
-        when = f"fetched {day_time(context.started_at)}"
-        if context.state == "failed":
-            meta = Content.assemble(("the fetch failed", theme.URGENT), f" · {when}")
-        elif context.stale(self.item):
-            meta = Content.assemble(
-                (when, theme.DIM), ("  · the agent changed the item since", theme.ACCENT)
-            )
-        else:
-            meta = Content(when)
         with Vertical(id="context-box"):
-            yield Static("esc close · r fetch again · y copy", id="c-keys")
+            yield Static(id="c-keys")
             with VerticalScroll(id="context"):
                 yield Static(Content(self.item.title), id="c-title")
-                yield Static(meta, id="c-meta")
-                # Fetched from other people's messages, so a failure shows as text, not Markdown.
-                if context.state == "failed":
-                    yield Static(Content(context.text), id="c-error")
-                else:
-                    yield Markdown(context.text, id="c-body")
+                yield Static(id="c-meta")
+                yield ContextPanel(label=False, id="c-panel")
+
+    def on_mount(self) -> None:
+        self.show_context(self.context, self.frame)
+
+    def show_context(self, context: Context, frame: str) -> None:
+        """Show `context`, the latest state of the one this view opened with."""
+        self.context = context
+        self.frame = frame
+        try:
+            meta = self.query_one("#c-meta", Static)
+        except NoMatches:
+            return  # Pushed but not composed yet; on_mount shows it.
+        meta.update(context_meta(context, self.item))
+        self.query_one(ContextPanel).show(context, frame, self.item)
+        fetching = context.state == "fetching"
+        keys = "esc close" if fetching else "esc close · r fetch again · y copy"
+        self.query_one("#c-keys", Static).update(keys)
+        self.refresh_bindings()
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        # Nothing to fetch again or copy until the fetch ends.
+        if action in ("dismiss", "copy") and parameters != (None,):
+            return self.context.state != "fetching"
+        return True
 
     def action_copy(self) -> None:
         # Terminals and multiplexers often drop the escape code copy_to_clipboard() sends.
