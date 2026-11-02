@@ -15,7 +15,7 @@ skill, so install that one too.
 
 Goal: the local catchup inbox holds exactly what needs the user: messages waiting for their reply, and important context where they are tagged. The user reads it in the catchup TUI. Each run adds what is new, updates what changed, and closes everything that is finished. The inbox is the only output: never post on Slack or send email.
 
-Follow the catchup-inbox skill for the inbox commands and rules. This skill says which sources to read and how to judge what you find there.
+The catchup-inbox skill describes the `catchup` commands and the inbox rules in full; this skill applies them to these sources.
 
 ## Window
 
@@ -27,7 +27,7 @@ Call the logged-in Slack user ID `ME`. The `slack_search_public_and_private` too
 
 ## Read the inbox first
 
-Run `catchup list --state all --kind all --since 14d --json`. It returns every item touched in the last 14 days with its state and its last event. Run `catchup show ID --json` when you need an item's full history, for example to see that the user snoozed it twice or closed it themselves (actor `user`). Each item's `notes` are the user's own context and to-dos, such as "waiting on Dana" or "close when the MR merges". Act on them and never repeat them back as news.
+Run `catchup list --state all --kind all --since 14d --json`. It returns every item touched in the last 14 days with its state (`open`, `snoozed`, `done`, `ignored`; FYIs have none) and its last event. Run `catchup show ID --json` when you need an item's full history, for example to see that the user snoozed it twice or closed it themselves (actor `user`). Each item's `notes` are the user's own context and to-dos, such as "waiting on Dana" or "close when the MR merges". Act on them and never repeat them back as news. `opened_at` means the user started working on the item, not that it is handled.
 
 ## Gather: Slack
 
@@ -45,27 +45,25 @@ Use the Slack MCP tools with `response_format: detailed` (concise search results
    <!-- List your noise senders here, e.g. "excluding: calendar-notification, newsletter, jira, ci". -->
 2. `get_thread` (`PLAIN_TEXT`) on threads where the user is in To or CC or named in the body, and a human wrote the last message.
 
-<!--
 ## Gather: code review
 
-Delete this section if you do not review code. Otherwise keep the forge you use.
+<!-- Keep the forge you use, or delete this section if you do not review code. -->
 
-1. Review requests, same cutoff: on GitLab `from:gitlab after:T ("added as a reviewer" OR "mentioned you")`, on GitHub `from:notifications@github.com after:T ("requested your review" OR "mentioned you")`.
-2. Check each one with `glab` or `gh`. Drop merge requests that are merged, closed, approved by the user, or that the user commented on after the request.
--->
+1. Review requests in Gmail, same cutoff: on GitLab `from:gitlab after:T ("added as a reviewer" OR "added as an assignee" OR "mentioned you")`, on GitHub `from:notifications@github.com after:T ("requested your review" OR "assigned you" OR "mentioned you")`.
+2. If `glab` or `gh` is available, drop merge requests that are merged, closed, approved by the user, or that the user commented on after the request.
 
 ## Classify
 
-A conversation is handled when the user replied after the last message to them, left an emoji reaction on it (their user ID is among the reactors), or wrote the last message in the email thread. A reply that only promises something ("will look EOB") does not count as handled.
+A conversation is handled when the user replied after the last message to them, left an emoji reaction on it (their user ID is among the reactors), wrote the last message in the email thread, or the merge request is merged, closed or approved by them. A reply that only promises something ("will look EOB") does not count as handled.
 
 Sort every candidate into one of two kinds, or drop it:
 
 - **waiting:** someone asks the user a question, requests a review, decision, or approval, or is otherwise blocked on them.
 - **fyi:** the user is tagged, in To/CC, or named, no action is asked, but the content matters to their work: a decision, a deadline, an incident, a change to something they own. Drop greetings, thanks, acknowledgements, and chatter.
 
-Drop bots and automation: CI and deploy notifications, calendar invites, reminders, newsletters, vendor cold outreach, join/leave notices.
+Drop bots and automation, except the code review requests above: CI and deploy notifications, calendar invites, reminders, newsletters, vendor cold outreach, join/leave notices.
 
-<!-- Name your bots here, and any automated mail you want kept, such as review requests. -->
+<!-- Name your bots here, and any other automated mail you want kept. -->
 
 ## Close what is finished
 
@@ -81,13 +79,24 @@ Close each finished item with `catchup done ID --note "<what finished it, e.g. !
 
 ## Sync the inbox
 
-Match each candidate to an existing item, then add, update, reopen or skip it by the catchup-inbox rules. Group by the piece of work, not by the message: one item may cover several merge requests or people when the user would handle them in one go, and a conversation with two separate asks may become two items.
+Decide per candidate whether it belongs to an existing item: the same conversation, or the same piece of work (one merge request, one ticket). You decide grouping: one item may cover several merge requests or people when the user would handle them in one go, and a conversation with two separate asks may become two items.
+
+- **No matching item:** `catchup add`. Skip handled conversations.
+- **Matches an open or snoozed item:** if there is news, `catchup update ID` with the new title or body and a `--note` saying what changed. If someone other than the user posted in a snoozed item's conversation, also `catchup reopen ID --note "<who posted>"`.
+- **Matches a done item:** if someone other than the user posted after the item's last event and it waits on the user again, `catchup reopen ID --note "<who posted>"` and update the text. Otherwise leave it.
+- **Matches an ignored item:** leave it, whatever happened.
+- **FYI:** add each new FYI once. Never close, update or repeat an FYI.
+
+Fields for `add` and `update`:
 
 - `--title`: one line, who and what, e.g. `Dana: review the retry limit change !42`.
-- `--link`: every place the user would open: the Slack thread or DM, the email thread, each merge request, the ticket. Use short labels (`DM`, `#channel`, `!42`, `ABC-123`).
-- `--priority urgent` when someone is blocked today, a deadline is within two days, or it is about a production incident or money; `low` for open-ended questions with no deadline.
+- `--body`: one to three short sentences with the detail the user needs to act. Pass long text with `--body -` on stdin.
+- `--priority urgent` when someone is blocked today, a deadline is within two days, or it is about a production incident or money; `low` for open-ended questions with no deadline; otherwise leave the default.
+- `--link "label=url"` for every place the user would open: the Slack thread or DM, the email thread, each merge request, the ticket. Use short labels (`DM`, `#channel`, `!42`, `ABC-123`). `update --link` replaces the whole list, so pass all of them.
 - `--prompt` when one coding-agent task fits the item. The agent runs in the user's home directory, so include full URLs:
   - a merge request waiting for review: `Review <MR url> and list the problems you find. Do not post anything.`
+  - an approved merge request waiting for them to merge: `Merge <MR url> once its pipeline is green.`
+  - a ticket to work on: `Read <ticket url> and plan the work.`
   - a question to answer: `Read <thread url> and draft a reply as a Slack draft. Do not send it.`
 
 <!-- If you have your own agent commands or skills, put them in these prompts instead. -->
