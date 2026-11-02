@@ -8,11 +8,29 @@ The agent decides what counts as an item, what to group, and when to close or re
 
 ## Install
 
+Paste this into [Claude Code](https://claude.com/claude-code). It installs catchup, writes a catchup skill for your sources with you, and makes the UI run it every hour:
+
+```text
+Set up catchup for me (https://github.com/lukashonke/catchup): a local inbox that a scheduled agent run fills from my chat, email and other sources.
+
+1. Install it with `uv tool install git+https://github.com/lukashonke/catchup`. It needs Python 3.11 or later and uv; if uv is missing, install it first.
+2. Install the inbox guide: download https://raw.githubusercontent.com/lukashonke/catchup/main/skills/catchup-inbox/SKILL.md to ~/.claude/skills/catchup-inbox/SKILL.md.
+3. Write my catchup skill at ~/.claude/skills/catchup/SKILL.md from the example at https://raw.githubusercontent.com/lukashonke/catchup/main/examples/catchup/SKILL.md. Check which connectors I have (Slack, Gmail, others), then ask me about my sources: channels to read in full, senders and bots that are only noise, where I get code reviews (GitHub, GitLab or none), and the agent commands I want in the item prompts. Adapt each marked spot to my answers, drop the sections for sources I do not use, and delete the comments.
+4. Set `agent_prompt` in ~/.config/catchup/config.toml to "Use the /catchup skill to catch me up." Ask me whether I want another interval than every hour (`agent_every`) and the Todoist tab (`todoist = true`, which needs the `td` CLI).
+5. Tell me to start `catchup` in a terminal tab, and offer to run /catchup once so I see the first items.
+
+If one of these files already exists, show me what is in it and ask before you change it.
+```
+
+### Install by hand
+
 Catchup needs Python 3.11 or later and [uv](https://docs.astral.sh/uv/).
 
 ```sh
 uv tool install git+https://github.com/lukashonke/catchup
 ```
+
+Then follow the quick start, and install the skills as [How an agent uses catchup](#how-an-agent-uses-catchup) describes.
 
 ## Quick start
 
