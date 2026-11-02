@@ -167,7 +167,7 @@ On the tab, Space completes the task, Enter fetches its context as it does for a
 
 An action changes the row at once, then td carries it out, and then the tab reads the list again, which puts a row back if the action failed. A read that runs while an action is still on its way to Todoist may predate it, so the tab drops that read and waits for the one after the action.
 
-Rescheduling uses the snooze picker. A pick within a day that is not a midnight, such as 3 hours, becomes that date and time. Any other pick becomes its day, and a task due at a time of day keeps that time. `td task reschedule` keeps the recurrence.
+Rescheduling uses the snooze picker. A pick within a day that is not a midnight, such as 3 hours, becomes that date and time. Any other pick becomes its day, and a task due at a time of day keeps that time. `td task reschedule` keeps the recurrence. A task moved past today leaves the list at once, as a completed one does; the read after td answers brings it back if the filter still matches it.
 
 `a`, A and Ctrl+A open the task through the same open commands as an item. Its prompt holds the title, the description and the link to the task. A task has no item id, so `CATCHUP_ID` is 0.
 
