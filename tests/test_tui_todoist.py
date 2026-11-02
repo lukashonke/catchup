@@ -153,13 +153,37 @@ async def test_z_reschedules_keeping_the_time_of_a_timed_task(db: Path, td: Stan
         assert text(app, ".dialog-title") == "Reschedule to"
         await pilot.press("2")
         await settle(app, pilot)
-        await pilot.press("down", "z", "2")
+        # The rescheduled task left the list, so the next one is selected.
+        assert text(app, "#t-title") == "Water the plants"
+        await pilot.press("z", "2")
         await settle(app, pilot)
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
     assert [call for call in td.calls() if "reschedule" in call] == [
         f"task reschedule id:i1 {tomorrow}",
         f"task reschedule id:i2 {tomorrow}T15:00:00",
     ]
+
+
+async def test_a_task_rescheduled_past_today_leaves_the_list_at_once(
+    db: Path, td: StandIn, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    finish = asyncio.Event()
+
+    async def reschedule(command: object, task_id: str, due: str) -> None:
+        await finish.wait()
+
+    monkeypatch.setattr("catchup.todoist.reschedule", reschedule)
+    app = CatchupApp(Config(todoist=True, todoist_command=td.command))
+    async with app.run_test(size=(140, 40)) as pilot:
+        await todoist_tab(app, pilot)
+        await pilot.press("z", "2")
+        await pilot.pause()
+        assert rows(app) == [None, "i2", None, None, "w1"]
+
+        td.reply("task-list", [task("w1", "Deploy the fix", "work", date.today())])
+        finish.set()
+        await settle(app, pilot)
+        assert rows(app) == [None, "w1"]
 
 
 async def test_ctrl_enter_opens_the_task_in_todoist_and_a_opens_it_in_claude(

@@ -475,7 +475,14 @@ class TodoistView(Vertical, can_focus=True):
         due = todoist.due_value(task, until, utc_now())
         due_date, due_time = todoist.parse_due(due)
         moved = dataclasses.replace(task, due_date=due_date, due_time=due_time)
-        self.tasks = [moved if other.id == task.id else other for other in self.tasks]
+        # A task moved past today leaves the list at once; the read after td answers brings it
+        # back if the filter still matches it.
+        later = due_date is not None and due_date > utc_now().astimezone().date()
+        self.tasks = [
+            moved if other.id == task.id else other
+            for other in self.tasks
+            if not (later and other.id == task.id)
+        ]
         self._show()
         command = self.app.config.todoist_command
         self._act(task, todoist.reschedule(command, task.id, due), f"Rescheduled to {_when(moved)}")
