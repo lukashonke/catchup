@@ -119,6 +119,14 @@ ITEMS = [
     ),
 ]
 
+DONE = [
+    ("Review: retry limit for webhooks", "!409 merged"),
+    ("Dana: is the export bug fixed on staging?", "Ken answered in the thread"),
+    ("Approve Lena's access to the analytics project", "you approved it"),
+    ("Pick a date for the incident review", "you replied: Thursday"),
+    ("SHOP-870: decide on the cache TTL", "ticket done"),
+]
+
 
 def seed(path: Path) -> int:
     """Write the fictional items and return the id of the one to select."""
@@ -135,7 +143,15 @@ def seed(path: Path) -> int:
     with Store(path, clock=lambda: now - timedelta(hours=2)) as store:
         store.mark_opened(rate_limiter.id)
     with Store(path, clock=lambda: now - timedelta(minutes=40)) as store:
-        store.update(rate_limiter.id, note="Tomás pushed the requested changes")
+        store.update(
+            rate_limiter.id,
+            prompt=f"Review {GITLAB}412 against the limits in the design doc"
+            " and list the problems you find. Do not post anything.",
+            note="Tomás pushed the requested changes",
+        )
+        # Finished work the agent closed on its own, for the Done tab's count.
+        for title, note in DONE:
+            store.done(store.add("waiting", title).id, note=note)
     with Store(path, clock=lambda: now - timedelta(minutes=25)) as store:
         store.update(rate_limiter.id, note="Merge only after the load test", actor="user")
     return rate_limiter.id
@@ -146,8 +162,8 @@ async def main() -> None:
         path = Path(directory) / "catchup.db"
         selected = seed(path)
         os.environ["CATCHUP_DB"] = str(path)
-        # Inside herdr the app would rename the tab this script runs in.
-        os.environ.pop("HERDR_ENV", None)
+        # Inside Herdr the app would rename the tab this script runs in.
+        os.environ.pop("HC_TERMINAL_ID", None)
         from catchup.tui.app import CatchupApp
         from catchup.tui.widgets import ItemList
 
