@@ -59,7 +59,7 @@ async def test_open_command_gets_the_item_in_env(
     monkeypatch.setattr("catchup.opener.run_command", fake)
     config = Config(open_command=["/opt/open.sh", "--new"])
 
-    await open_item(item, config, {"PATH": "/bin", "HERDR_ENV": "1"})
+    await open_item(item, config, {"PATH": "/bin", "HC_TERMINAL_ID": "t9"})
     argv, env = fake.calls[0]
     assert argv == ["/opt/open.sh", "--new"]
     assert env["PATH"] == "/bin"
@@ -79,37 +79,35 @@ async def test_run_command_reports_a_missing_executable() -> None:
         await run_command(["/nonexistent/opener"], {})
 
 
-async def test_herdr_opener_creates_a_tab_and_starts_claude_with_the_prompt(
+HERDR = {"HC_TERMINAL_ID": "t9"}
+OK = (0, "{}", "")
+
+
+async def test_herdr_opener_creates_a_tab_that_starts_claude_with_the_prompt(
     item: Item, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    fake = FakeRun(
-        (0, '{"result": {"tab": {"tab_id": "w1:t9"}, "root_pane": {"pane_id": "w1:p7"}}}', ""),
-        (0, '{"result": {}}', ""),
-        (0, '{"result": {}}', ""),
-    )
+    fake = FakeRun((0, '{"pane": "p1", "terminal": "t12"}', ""))
     monkeypatch.setattr("catchup.herdr.run_command", fake)
-    environ = {"HERDR_ENV": "1", "HERDR_WORKSPACE_ID": "w1", "HERDR_BIN_PATH": "/opt/herdr"}
 
-    await open_item(item, Config(), environ)
+    await open_item(item, Config(), HERDR)
 
-    (create, _), (start, _), (prompt, _) = fake.calls
-    assert create == [
-        "/opt/herdr", "tab", "create", "--workspace", "w1", "--cwd", str(Path.home()),
-        "--label", "Answer Ken about the flaky…", "--focus",
-    ]  # fmt: skip
-    name = start[3]
-    assert name.startswith(f"catchup-{item.id}-")
-    assert start == ["/opt/herdr", "agent", "start", name, "--kind", "claude", "--pane", "w1:p7"]
-    assert prompt == ["/opt/herdr", "agent", "prompt", name, default_prompt(item)]
+    ((argv, _),) = fake.calls
+    assert argv[:3] == ["herdr-app", "do", "tab.new"]
+    assert json.loads(argv[3]) == {
+        "name": "Answer Ken about the flaky…",
+        "folder": str(Path.home()),
+        "argv": ["claude"],
+        "task": default_prompt(item),
+    }
 
 
 async def test_herdr_opener_reports_the_herdr_error(
     item: Item, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    error = '{"error": {"code": "workspace_not_found", "message": "workspace w1 not found"}}'
+    error = '{"error": "no space is open"}'
     monkeypatch.setattr("catchup.herdr.run_command", FakeRun((1, error, "")))
-    with pytest.raises(CatchupError, match="herdr tab create failed: workspace w1 not found"):
-        await open_item(item, Config(), {"HERDR_ENV": "1", "HERDR_WORKSPACE_ID": "w1"})
+    with pytest.raises(CatchupError, match="herdr-app tab.new failed: no space is open"):
+        await open_item(item, Config(), HERDR)
 
 
 async def test_without_config_or_herdr_it_explains_open_command(
@@ -120,74 +118,90 @@ async def test_without_config_or_herdr_it_explains_open_command(
         await open_item(item, Config(), {})
 
 
-HERDR = {"HERDR_ENV": "1", "HERDR_TAB_ID": "w1:t2", "HERDR_BIN_PATH": "/opt/herdr"}
-OK = (0, '{"result": {}}', "")
+def layout(name: str | None) -> tuple[int, str, str]:
+    """The answer of `herdr-app ls` with the TUI's terminal t9 in tab tb2, named `name`."""
+    tabs = [
+        {"id": "tb1", "name": "other", "terminals": [{"terminal": "t1"}]},
+        {"id": "tb2", "name": name, "terminals": [{"terminal": "t3"}, {"terminal": "t9"}]},
+    ]
+    return (0, json.dumps({"spaces": [{"id": "sp1", "tabs": tabs}]}), "")
 
 
-def tab_info(label: str) -> tuple[int, str, str]:
-    return (0, json.dumps({"result": {"tab": {"label": label}}}), "")
+def renames(fake: FakeRun) -> list[dict[str, str]]:
+    return [json.loads(argv[3]) for argv, _ in fake.calls if argv[1:3] == ["do", "tab.rename"]]
 
 
-async def test_tab_title_appends_the_counts_once_per_text_and_restores_the_label(
+async def test_tab_title_appends_the_counts_once_per_text_and_restores_the_name(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    fake = FakeRun(tab_info("inbox"), OK, OK, OK)
+    fake = FakeRun(layout("inbox"), OK, OK, OK)
     monkeypatch.setattr("catchup.herdr.run_command", fake)
     title = TabTitle(HERDR)
     await title.show("3 · 1 new")
     await title.show("3 · 1 new")
     await title.show("3")
     await title.restore()
-    assert [argv[1:] for argv, _ in fake.calls] == [
-        ["tab", "get", "w1:t2"],
-        ["tab", "rename", "w1:t2", "inbox 3 · 1 new"],
-        ["tab", "rename", "w1:t2", "inbox 3"],
-        ["tab", "rename", "w1:t2", "inbox"],
+    assert fake.calls[0][0] == ["herdr-app", "ls"]
+    assert renames(fake) == [
+        {"id": "tb2", "name": "inbox 3 · 1 new"},
+        {"id": "tb2", "name": "inbox 3"},
+        {"id": "tb2", "name": "inbox"},
     ]
 
 
 @pytest.mark.parametrize(
-    ("start", "base"), [("catchup 12 · 3 new", "catchup"), ("inbox 7", "inbox"), ("", "catchup")]
+    ("start", "base", "restored"),
+    [
+        ("catchup 12 · 3 new", "catchup", "catchup"),
+        ("inbox 7", "inbox", "inbox"),
+        # An unnamed tab gets its number back.
+        (None, "catchup", ""),
+    ],
 )
-async def test_tab_title_drops_counts_left_by_a_crash_and_names_an_empty_label(
-    monkeypatch: pytest.MonkeyPatch, start: str, base: str
+async def test_tab_title_drops_counts_left_by_a_crash_and_names_an_unnamed_tab(
+    monkeypatch: pytest.MonkeyPatch, start: str | None, base: str, restored: str
 ) -> None:
-    fake = FakeRun(tab_info(start), OK, OK)
+    fake = FakeRun(layout(start), OK, OK)
     monkeypatch.setattr("catchup.herdr.run_command", fake)
     title = TabTitle(HERDR)
     await title.show("4")
     await title.restore()
-    assert [argv[-1] for argv, _ in fake.calls[1:]] == [f"{base} 4", base]
+    assert [rename["name"] for rename in renames(fake)] == [f"{base} 4", restored]
 
 
-async def test_tab_title_does_nothing_outside_herdr(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_tab_title_does_nothing_outside_herdr_or_until_a_tab_shows_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     fake = FakeRun()
     monkeypatch.setattr("catchup.herdr.run_command", fake)
-    title = TabTitle({"HERDR_TAB_ID": "w1:t2"})
+    title = TabTitle({"HERDR_ENV": "1", "HERDR_TAB_ID": "w1:t2"})
     await title.show("3")
     await title.restore()
     assert fake.calls == []
+
+    # A terminal that no tab shows yet is looked for again on the next show.
+    fake = FakeRun(layout("inbox"), layout("inbox"))
+    monkeypatch.setattr("catchup.herdr.run_command", fake)
+    title = TabTitle({"HC_TERMINAL_ID": "t40"})
+    await title.show("3")
+    await title.show("4")
+    await title.restore()
+    assert [argv for argv, _ in fake.calls] == [["herdr-app", "ls"], ["herdr-app", "ls"]]
 
 
 async def test_herdr_opener_creates_a_space_for_the_new_space_action(
     item: Item, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    fake = FakeRun(
-        (0, '{"result": {"workspace": {}, "root_pane": {"pane_id": "w9:p1"}}}', ""),
-        (0, '{"result": {}}', ""),
-        (0, '{"result": {}}', ""),
-    )
+    fake = FakeRun((0, '{"space": "sp9", "terminal": "t12"}', ""))
     monkeypatch.setattr("catchup.herdr.run_command", fake)
-    environ = {"HERDR_ENV": "1", "HERDR_WORKSPACE_ID": "w1", "HERDR_BIN_PATH": "/opt/herdr"}
 
-    await open_item(item, Config(), environ, space=True)
+    await open_item(item, Config(), HERDR, space=True)
 
-    (create, _), (start, _), _ = fake.calls
-    assert create == [
-        "/opt/herdr", "workspace", "create", "--cwd", str(Path.home()),
-        "--label", "Answer Ken about the flaky…", "--focus",
-    ]  # fmt: skip
-    assert start[-2:] == ["--pane", "w9:p1"]
+    ((argv, _),) = fake.calls
+    assert argv[:3] == ["herdr-app", "do", "space.new"]
+    args = json.loads(argv[3])
+    assert args["name"] == args["tab"] == "Answer Ken about the flaky…"
+    assert args["argv"] == ["claude"] and args["task"] == default_prompt(item)
 
 
 async def test_the_new_space_action_runs_its_own_command(

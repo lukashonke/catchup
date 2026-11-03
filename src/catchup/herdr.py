@@ -1,8 +1,11 @@
-"""herdr support: the bundled opener, and the inbox counts in the label of the TUI's tab."""
+"""Herdr support: the bundled opener, and the inbox counts in the label of the TUI's tab.
+
+Both talk to the Herdr app through `herdr-app`. `HC_TERMINAL_ID`, which herdr-core sets in each
+of its terminals, tells that the TUI runs inside Herdr.
+"""
 
 import json
 import re
-import secrets
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -18,61 +21,67 @@ _COUNTS = re.compile(r"\s+\d+( · \d+ new)?$")
 
 
 async def open_in_herdr(
-    item_id: int, title: str, prompt: str, environ: Mapping[str, str], space: bool = False
+    title: str, prompt: str, environ: Mapping[str, str], space: bool = False
 ) -> None:
-    """Start Claude with the prompt in a new herdr tab, or with `space` in a new space.
+    """Start Claude with the prompt in a new Herdr tab, or with `space` in a new space.
 
-    The tab or space is labeled with the title and starts in the home directory.
+    The tab or space is named after the title, starts in the home directory, and is shown at once.
     """
-    herdr = environ.get("HERDR_BIN_PATH") or "herdr"
-    where = ["--cwd", str(Path.home()), "--label", _label(title), "--focus"]
-    # Both answers name the pane they start with as root_pane.
+    name = _label(title)
+    args = {"folder": str(Path.home()), "argv": ["claude"], "task": prompt}
     if space:
-        created = await _call(environ, herdr, "workspace", "create", *where)
+        await _do(environ, "space.new", name=name, tab=name, **args)
     else:
-        # Inside a herdr pane this names the caller's workspace; without it herdr picks the focused one.
-        workspace = environ.get("HERDR_WORKSPACE_ID")
-        flag = ("--workspace", workspace) if workspace else ()
-        created = await _call(environ, herdr, "tab", "create", *flag, *where)
-    pane = created["root_pane"]["pane_id"]
-    # Agent names must be unique among live agents, and the same item can be opened twice.
-    name = f"catchup-{item_id}-{secrets.token_hex(2)}"
-    await _call(environ, herdr, "agent", "start", name, "--kind", "claude", "--pane", pane)
-    # herdr reads a leading "-" as an option even after "--"; a space keeps it text.
-    text = " " + prompt if prompt.startswith("-") else prompt
-    await _call(environ, herdr, "agent", "prompt", name, text)
+        # Without a space, the tab goes to the one shown: the TUI's, as the key was pressed there.
+        await _do(environ, "tab.new", name=name, **args)
 
 
 class TabTitle:
-    """Show the inbox counts after the label of the herdr tab the TUI runs in."""
+    """Show the inbox counts after the name of the Herdr tab the TUI runs in."""
 
     def __init__(self, environ: Mapping[str, str]) -> None:
         self.environ = environ
-        self.tab = environ.get("HERDR_TAB_ID") if environ.get("HERDR_ENV") == "1" else None
-        # The tab's label without counts, read on the first show; also what restore() puts back.
+        self.terminal = environ.get("HC_TERMINAL_ID") or None
+        # Found on a show, with the tab's name.
+        self.tab: str | None = None
+        self.name: str | None = None
+        # The name without counts; what the counts follow.
         self.base: str | None = None
         self.shown: str | None = None
 
     async def show(self, counts: str) -> None:
-        """Label the tab `<base> <counts>` unless it shows that already; raise CatchupError."""
-        if self.tab is None:
+        """Name the tab `<base> <counts>` unless it shows that already; raise CatchupError."""
+        if self.terminal is None:
             return
-        herdr = self.environ.get("HERDR_BIN_PATH") or "herdr"
         if self.base is None:
-            label = (await _call(self.environ, herdr, "tab", "get", self.tab))["tab"]["label"]
-            self.base = _COUNTS.sub("", label).strip() or "catchup"
+            found = await self._find()
+            # Not in a tab yet, or never, as for a hidden worker: look again on the next show.
+            if found is None:
+                return
+            self.tab, self.name = found
+            self.base = _COUNTS.sub("", self.name).strip() or "catchup"
         text = f"{self.base} {counts}"
         if text != self.shown:
-            await _call(self.environ, herdr, "tab", "rename", self.tab, text)
+            await _do(self.environ, "tab.rename", id=self.tab, name=text)
             self.shown = text
 
     async def restore(self) -> None:
-        """Give the tab back its label without counts; raise CatchupError on failure."""
+        """Give the tab back its name from before the counts; raise CatchupError on failure."""
         if self.tab is None or self.base is None or self.shown is None:
             return
-        herdr = self.environ.get("HERDR_BIN_PATH") or "herdr"
-        await _call(self.environ, herdr, "tab", "rename", self.tab, self.base)
+        # An empty name gives an unnamed tab back its number.
+        name = self.base if self.name else ""
+        await _do(self.environ, "tab.rename", id=self.tab, name=name)
         self.shown = None
+
+    async def _find(self) -> tuple[str, str] | None:
+        """Return the ID and name of the tab that shows the TUI's terminal."""
+        layout = await _herdr(self.environ, "ls")
+        for space in layout.get("spaces", []):
+            for tab in space.get("tabs", []):
+                if any(t.get("terminal") == self.terminal for t in tab.get("terminals", [])):
+                    return tab["id"], tab.get("name") or ""
+        return None
 
 
 def _label(title: str) -> str:
@@ -85,13 +94,21 @@ def _label(title: str) -> str:
     return cut.rstrip() + "…"
 
 
-async def _call(environ: Mapping[str, str], *argv: str) -> dict[str, Any]:
-    result = await run_command(argv, environ)
+async def _do(environ: Mapping[str, str], command: str, **args: Any) -> dict[str, Any]:
+    # One JSON object, so a prompt that starts with "-" is never read as an option.
+    return await _herdr(environ, "do", command, json.dumps(args))
+
+
+async def _herdr(environ: Mapping[str, str], *args: str) -> dict[str, Any]:
+    result = await run_command(["herdr-app", *args], environ)
     try:
         response = json.loads(result.stdout)
     except json.JSONDecodeError:
         response = {}
+    if not isinstance(response, dict):
+        response = {}
     if result.returncode != 0 or "error" in response:
-        message = response.get("error", {}).get("message") or result.stderr.strip()
-        raise CatchupError(f"herdr {argv[1]} {argv[2]} failed: {message or 'no output'}")
-    return response.get("result", {})
+        message = response.get("error") or result.stderr.strip()
+        what = args[1] if args[0] == "do" else args[0]
+        raise CatchupError(f"herdr-app {what} failed: {message or 'no output'}")
+    return response

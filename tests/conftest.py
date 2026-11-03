@@ -9,9 +9,9 @@ import pytest
 
 @pytest.fixture
 def no_agent_runs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Mock:
-    """Keep a TUI test from starting a real agent run or fetch, or renaming its herdr tab."""
+    """Keep a TUI test from starting a real agent run or fetch, or renaming its Herdr tab."""
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
-    monkeypatch.delenv("HERDR_ENV", raising=False)
+    monkeypatch.delenv("HC_TERMINAL_ID", raising=False)
     monkeypatch.setattr("catchup.agent.is_due", lambda config, now: False)
     start = Mock(return_value=None)
     monkeypatch.setattr("catchup.agent.start", start)

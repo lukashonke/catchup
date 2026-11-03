@@ -40,9 +40,9 @@ def item_env(item: Item) -> dict[str, str]:
 async def open_item(
     item: Item, config: Config, environ: Mapping[str, str] = os.environ, space: bool = False
 ) -> None:
-    """Open the item with its command, else with herdr inside herdr; raise CatchupError on failure.
+    """Open the item with its command, else with Herdr inside Herdr; raise CatchupError on failure.
 
-    With `space`, it opens in a new herdr space through `open_space_command` instead of a tab.
+    With `space`, it opens in a new Herdr space through `open_space_command` instead of a tab.
     """
     key, command, label = (
         ("open_space_command", config.open_space_command, config.open_space_label)
@@ -54,10 +54,10 @@ async def open_item(
         if result.returncode != 0:
             detail = result.stderr.strip() or result.stdout.strip() or "no output"
             raise CatchupError(f"{command[0]} exited with code {result.returncode}: {detail}")
-    elif environ.get("HERDR_ENV") == "1":
+    elif environ.get("HC_TERMINAL_ID"):
         from catchup.herdr import open_in_herdr
 
-        await open_in_herdr(item.id, item.title, prompt_of(item), environ, space=space)
+        await open_in_herdr(item.title, prompt_of(item), environ, space=space)
     else:
         raise CatchupError(
             f"{label} has nothing to run. Set {key} in {default_config_path()},"

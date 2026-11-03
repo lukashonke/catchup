@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import subprocess
 from collections.abc import Callable, Sequence
@@ -518,14 +519,15 @@ async def test_counts_show_on_the_herdr_tab_until_exit(
     db: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     add(db, "waiting", "Answer Ken", 1)
-    monkeypatch.setenv("HERDR_ENV", "1")
-    monkeypatch.setenv("HERDR_TAB_ID", "w1:t2")
+    monkeypatch.setenv("HC_TERMINAL_ID", "t9")
     labels: list[str] = []
+    tab = {"id": "tb2", "name": "inbox", "terminals": [{"terminal": "t9"}]}
 
     async def herdr(argv: Sequence[str], env: object) -> subprocess.CompletedProcess[str]:
-        if list(argv[1:3]) == ["tab", "rename"]:
-            labels.append(argv[4])
-        return subprocess.CompletedProcess(argv, 0, '{"result": {"tab": {"label": "inbox"}}}', "")
+        if list(argv[1:3]) == ["do", "tab.rename"]:
+            labels.append(json.loads(argv[3])["name"])
+        answer = {"spaces": [{"tabs": [tab]}]} if argv[1] == "ls" else {}
+        return subprocess.CompletedProcess(argv, 0, json.dumps(answer), "")
 
     monkeypatch.setattr("catchup.herdr.run_command", herdr)
     app = CatchupApp(Config())
@@ -543,8 +545,7 @@ async def test_a_failing_herdr_is_reported_once_and_left_alone(
     db: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     add(db, "waiting", "Answer Ken", 1)
-    monkeypatch.setenv("HERDR_ENV", "1")
-    monkeypatch.setenv("HERDR_TAB_ID", "w1:t2")
+    monkeypatch.setenv("HC_TERMINAL_ID", "t9")
     calls: list[Sequence[str]] = []
 
     async def herdr(argv: Sequence[str], env: object) -> subprocess.CompletedProcess[str]:
@@ -561,7 +562,7 @@ async def test_a_failing_herdr_is_reported_once_and_left_alone(
         await pilot.press("space")
         await app.workers.wait_for_complete()
     assert len(calls) == 1
-    assert notices.count("Cannot show the counts on the herdr tab") == 1
+    assert notices.count("Cannot show the counts on the Herdr tab") == 1
 
 
 async def test_an_agent_run_due_at_start_does_not_freeze_the_screen(

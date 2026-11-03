@@ -418,13 +418,13 @@ class CatchupApp(App[None]):
 
     @work(group="herdr", exclusive=True)
     async def _show_tab_title(self, counts: str) -> None:
-        """Show the counts on the herdr tab, so they are visible from the other tabs."""
+        """Show the counts on the Herdr tab, so they are visible from the other tabs."""
         try:
             await self.tab_title.show(counts)
         except CatchupError as e:
             # Report it once and stop trying; the inbox works the same without it.
-            self.tab_title.tab = None
-            self.notify(str(e), title="Cannot show the counts on the herdr tab", markup=False)
+            self.tab_title.terminal = self.tab_title.tab = None
+            self.notify(str(e), title="Cannot show the counts on the Herdr tab", markup=False)
 
     def _show_selected(self) -> None:
         """Show the item that the list highlights in the details pane."""
