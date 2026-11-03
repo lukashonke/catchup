@@ -42,7 +42,7 @@ Then follow the quick start, and install the skills as [How an agent uses catchu
 
    Up and down select an item, left and right switch the state tab. Enter fetches the item's context and then shows it in a popup (see [Context](#context)), a opens the item in Claude in a new tab, A or Ctrl+A opens it in a new space, Ctrl+Enter opens its first link, Space marks it done, Backspace ignores it, z snoozes it, u undoes the last change, n adds a note for the agent, / filters the list, s opens the settings, and q quits. Press ? for every key.
 
-   A dot marks the items the agent added or changed since you last looked at them. Inside [herdr](https://herdr.dev), the tab label shows the counts too, such as `catchup 12 · 3 new`.
+   A dot marks the items the agent added or changed since you last looked at them. Inside the Herdr app, the tab name shows the counts too, such as `catchup 12 · 3 new`.
 
 2. In another terminal, add an item by hand. The UI shows it at once.
 
@@ -93,7 +93,7 @@ Run `catchup --help` and `catchup COMMAND --help` for every option.
 
 ## Open in Claude
 
-"Open in Claude" in the UI (or `a` on an item) runs a command that starts a coding agent with the item's prompt. A second action, on `A` or Ctrl+A, does the same in a new herdr space. Set the commands in `~/.config/catchup/config.toml`, as lists of arguments, and optionally rename the actions:
+"Open in Claude" in the UI (or `a` on an item) runs a command that starts a coding agent with the item's prompt. A second action, on `A` or Ctrl+A, does the same in a new Herdr space. Set the commands in `~/.config/catchup/config.toml`, as lists of arguments, and optionally rename the actions:
 
 ```toml
 open_command = ["/path/to/my-opener.sh"]
@@ -111,7 +111,7 @@ Catchup runs the command without a shell and passes the item in environment vari
 
 The prompt comes from messages that other people wrote. Never paste these values into a shell string, such as `sh -c "claude '$CATCHUP_PROMPT'"`: a message could then run commands on your machine. Pass them to programs as separate arguments.
 
-If `open_command` is not set and the UI runs inside [herdr](https://herdr.dev) (`HERDR_ENV=1`), catchup uses its bundled herdr opener. It creates a tab in the current workspace, labeled with the item title, in your home directory, and starts Claude Code in it with the prompt. Without `open_space_command`, the second action creates a herdr space instead of a tab. Outside herdr and with no command set, the action tells you how to set it.
+If `open_command` is not set and the UI runs inside the Herdr app (`HC_TERMINAL_ID` is set), catchup uses its bundled Herdr opener. Through `herdr-app`, it creates a tab in the space you are looking at, named after the item title, in your home directory, and starts Claude Code in it with the prompt. Without `open_space_command`, the second action creates a Herdr space instead of a tab. Outside Herdr and with no command set, the action tells you how to set it.
 
 ### Example: a tmux window
 

@@ -88,7 +88,7 @@ catchup snooze ID --until 3h|1d|3d|1w|mon|tomorrow|YYYY-MM-DD [--note TEXT]
 open_command = ["/path/to/my-opener.sh"]
 # The name of that action on the button, in the footer and in notifications.
 open_label = "Open in Codex"
-# The same for the action that opens the item in a new herdr space.
+# The same for the action that opens the item in a new Herdr space.
 open_space_command = ["/path/to/my-opener.sh", "--new-window"]
 open_space_label = "Open in Codex, new window"
 # The quick run that fetches an item's context; it gets the prompt and the item on stdin.
@@ -112,7 +112,7 @@ The TUI starts the agent run, so a user needs no separate scheduler. A run is a 
 
 A supervisor process (`python -m catchup.agent`) runs the command, rather than the TUI waiting on it, because the run outlives the TUI. The supervisor enforces the time limit, writes the exit code into `agent.json` when the run ends, and writes a start line and an end line into `agent.log`. Any TUI, including one opened after the run ended, can then show that the run failed. The time limit runs on a clock that stops while the computer sleeps, so a run frozen overnight is not stopped when the lid opens. Stopping the supervisor with SIGTERM also stops the run, and its exit code still gets recorded.
 
-If `open_command` is not set and the TUI runs inside herdr (`HERDR_ENV=1`), catchup uses its bundled herdr opener. That opener creates a herdr tab in the current workspace, labeled with the item title, in the home directory, and starts Claude in it with the prompt. Outside herdr with no config, the button tells you how to set `open_command`.
+If `open_command` is not set and the TUI runs inside the Herdr app (`HC_TERMINAL_ID` is set), catchup uses its bundled Herdr opener. That opener asks `herdr-app` for a tab in the space on screen, named after the item title, in the home directory, with Claude started on the prompt. The arguments go as one JSON object, so a prompt that starts with `-` is never read as an option. Outside Herdr with no config, the button tells you how to set `open_command`.
 
 If an item has no prompt, catchup sends a default one: the title, the body, the link URLs, and "Help me handle this."
 
@@ -130,7 +130,7 @@ The TUI is a two-pane view:
 
 In a narrow terminal the details pane moves below the list, and the footer drops the hints that do not fit.
 
-Inside herdr (`HERDR_ENV=1` and `HERDR_TAB_ID` set), the TUI also shows the counts after the label of its own tab, such as `catchup 12 · 3 new`, so you see them from the other tabs. It reads the label once at start, renames the tab with `herdr tab rename` in the background only when the text changes, and puts the label back when it quits. herdr's pane title (`pane report-metadata --title`) is not drawn on the tab bar, so the tab label is the only place the counts show. A label left behind by a TUI that crashed loses its trailing counts when the next TUI starts, and an empty label becomes `catchup`. The counts belong to the whole tab, so in a tab split with other panes they label those panes too. If herdr fails, the TUI says so once and leaves the tab alone.
+Inside the Herdr app, the TUI also shows the counts after the name of its own tab, such as `catchup 12 · 3 new`, so you see them from the other tabs. It finds its tab in `herdr-app ls` by its own terminal (`HC_TERMINAL_ID`). A terminal that Herdr lists in no tab yet, such as one started a moment ago, is looked for again on the next change. The TUI renames the tab with `herdr-app do tab.rename` in the background only when the text changes, and puts the name back when it quits. A name left behind by a TUI that crashed loses its trailing counts when the next TUI starts. An unnamed tab shows `catchup` with the counts and gets its number back on quit. The counts belong to the whole tab, so in a tab split with other panes they name those panes too. If `herdr-app` fails, the TUI says so once and leaves the tab alone. `herdr-app` finds its window through `XDG_CONFIG_HOME` or `HERDR_APP_HOME`, so a TUI started with another config home needs `HERDR_APP_HOME` set.
 
 An item is new when the agent created, reopened or updated it after you last saw it. An item counts as seen when it stays selected for a second, so moving the selection past a row does not count. Seeing an item is not an event and does not change `updated_at`, so it never makes the item look changed to the agent.
 
@@ -144,7 +144,7 @@ The mouse and the up and down keys select items. The keys:
 
 - Left and right: the previous and the next state tab.
 - Enter: fetch the item's context, or show it in a popup once it is ready.
-- a: Open in Claude, in a new herdr tab. A or Ctrl+A: the same in a new herdr space.
+- a: Open in Claude, in a new Herdr tab. A or Ctrl+A: the same in a new Herdr space.
 - Ctrl+Enter: open the first link in the browser. The terminal must send Ctrl+Enter as its own key (the kitty keyboard protocol); otherwise it arrives as Enter.
 - Space: Done. Backspace: Ignore. z: the snooze picker. These act only on open and snoozed waiting items.
 - u: undo the latest state change made in this TUI session (done, ignore, snooze, reopen, from keys or buttons). It restores the previous state and snooze date as your change, with the note "undo". The undo history is in memory and ends with the session.
