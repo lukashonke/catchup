@@ -92,13 +92,17 @@ class NoteEditor(ModalScreen[str | None]):
     BINDINGS: ClassVar = [
         Binding("escape", "dismiss(None)", "Cancel", show=False),
         Binding("ctrl+s", "save", "Save", show=False),
+        # Priority, or the text area takes enter as a new line.
+        Binding("enter", "save", "Save", show=False, priority=True),
+        Binding("shift+enter", "new_line", "New line", show=False, priority=True),
     ]
 
     def __init__(
         self,
         title: str,
         heading: str = "Note",
-        keys: str = "The agent reads your notes on its next run.\nctrl+s save · esc cancel",
+        keys: str = "The agent reads your notes on its next run.\n"
+        "enter save · shift+enter new line · esc cancel",
     ) -> None:
         super().__init__()
         self.item_title = title
@@ -114,6 +118,9 @@ class NoteEditor(ModalScreen[str | None]):
 
     def action_save(self) -> None:
         self.dismiss(self.query_one(TextArea).text.strip() or None)
+
+    def action_new_line(self) -> None:
+        self.query_one(TextArea).insert("\n")
 
 
 class KeysHelp(ModalScreen[None]):

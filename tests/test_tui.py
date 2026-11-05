@@ -411,7 +411,7 @@ async def test_n_adds_a_note_as_the_user(db: Path) -> None:
         await pilot.press("n", "escape")
         await pilot.press("n", "space", "ctrl+s")
         assert not isinstance(app.screen, NoteEditor)
-        await pilot.press("n", *"Close when Tomas replies", "ctrl+s")
+        await pilot.press("n", *"Close when Tomas replies", "enter")
         await app.workers.wait_for_complete()
         await pilot.pause()
         assert "note: Close when Tomas replies" in text(app, "#d-history")
@@ -653,10 +653,10 @@ async def test_r_opens_with_the_reply_the_user_writes(
         assert not opened.called
         await pilot.press(key)
         assert text(app, ".dialog-title") == "Reply"
-        await pilot.press(*"Reschedule it", "ctrl+s")
+        await pilot.press(*"Reschedule it", "shift+enter", *"to Friday", "enter")
         await app.workers.wait_for_complete()
     assert opened.call_args.args[0].title == "Planning meeting at 10:00"
-    assert opened.call_args.kwargs == {"space": key == "R", "extra": "Reschedule it"}
+    assert opened.call_args.kwargs == {"space": key == "R", "extra": "Reschedule it\nto Friday"}
 
 
 async def test_enter_fetches_the_context_then_shows_it(

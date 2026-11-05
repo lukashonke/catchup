@@ -580,7 +580,8 @@ class CatchupApp(App[None]):
             editor = NoteEditor(
                 self.item.title,
                 heading="Reply",
-                keys=f"Claude gets this on top of the item's prompt.\nctrl+s {label} · esc cancel",
+                keys="Claude gets this on top of the item's prompt.\n"
+                f"enter {label} · shift+enter new line · esc cancel",
             )
             self.push_screen(editor, partial(self._reply_written, space))
 
