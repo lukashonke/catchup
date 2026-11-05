@@ -58,7 +58,7 @@ _CHANGED = {"done": "Done", "ignored": "Ignored", "open": "Reopened"}
 TODOIST = "todoist"
 Tab = State | Literal["todoist"]
 # The keys that act on inbox items, which do nothing on the Todoist tab.
-_INBOX_ONLY = {"change", "open_link", "undo", "snooze", "note", "filter", "clear_filter"}
+_INBOX_ONLY = {"change", "open_link", "undo", "snooze", "note", "reply", "filter", "clear_filter"}
 
 # A change takes the store and the item id, and returns the changed item.
 Change = Callable[[Store, int], Item]
@@ -91,6 +91,8 @@ class CatchupApp(App[None]):
         Binding("ctrl+enter", "open_link", "Open the first link", show=False),
         Binding("a", "open", "Open in Claude", show=False),
         Binding("A,shift+a,ctrl+a", "open(True)", "Open in Claude in a new space", show=False),
+        Binding("r", "reply", "Reply", show=False),
+        Binding("R,shift+r", "reply(True)", "Reply in a new space", show=False),
         Binding("u", "undo", "Undo", show=False),
         Binding("z", "snooze", "Snooze", show=False),
         Binding("n", "note", "Note", show=False),
@@ -164,6 +166,7 @@ class CatchupApp(App[None]):
             ("backspace", "ignore"),
             ("z", "snooze"),
             ("n", "note"),
+            ("r", "reply"),
             ("/", "filter"),
             *([("c", "catch up now")] if self.config.agent_prompt else []),
             ("q", "quit"),
@@ -571,6 +574,20 @@ class CatchupApp(App[None]):
         await self.reload()
         self.notify(item.title, title="Note added", markup=False)
 
+    def action_reply(self, space: bool = False) -> None:
+        if self.item:
+            label = self.config.open_space_label if space else self.config.open_label
+            editor = NoteEditor(
+                self.item.title,
+                heading="Reply",
+                keys=f"Claude gets this on top of the item's prompt.\nctrl+s {label} · esc cancel",
+            )
+            self.push_screen(editor, partial(self._reply_written, space))
+
+    def _reply_written(self, space: bool, reply: str | None) -> None:
+        if reply is not None:
+            self._open_in_claude(space, reply)
+
     def on_item_list_open_requested(self) -> None:
         if self.item:
             self.open_context(str(self.item.id), self.item)
@@ -645,7 +662,7 @@ class CatchupApp(App[None]):
         self.notify(before.title, title="Undone", markup=False)
 
     @work(group="open")
-    async def _open_in_claude(self, space: bool = False) -> None:
+    async def _open_in_claude(self, space: bool = False, extra: str | None = None) -> None:
         item = self.item
         if item is None:
             return
@@ -653,7 +670,7 @@ class CatchupApp(App[None]):
         label = self.config.open_space_label if space else self.config.open_label
         self.notify(item.title, title=label, markup=False)
         try:
-            await open_item(item, self.config, space=space)
+            await open_item(item, self.config, space=space, extra=extra)
         except CatchupError as e:
             self.notify(str(e), title=f"{label} failed", severity="error", timeout=12, markup=False)
             return

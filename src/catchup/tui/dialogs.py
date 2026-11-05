@@ -87,26 +87,30 @@ class SnoozePicker(ModalScreen[datetime | None]):
 
 
 class NoteEditor(ModalScreen[str | None]):
-    """Write a note on an item; dismiss with the text, or None on cancel or when it is empty."""
+    """Write a text about an item, a note by default; dismiss with it, or None on cancel or empty."""
 
     BINDINGS: ClassVar = [
         Binding("escape", "dismiss(None)", "Cancel", show=False),
         Binding("ctrl+s", "save", "Save", show=False),
     ]
 
-    def __init__(self, title: str) -> None:
+    def __init__(
+        self,
+        title: str,
+        heading: str = "Note",
+        keys: str = "The agent reads your notes on its next run.\nctrl+s save · esc cancel",
+    ) -> None:
         super().__init__()
         self.item_title = title
+        self.heading = heading
+        self.keys = keys
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="dialog"):
-            yield Static("Note", classes="dialog-title")
+            yield Static(self.heading, classes="dialog-title")
             yield Static(Content(self.item_title), classes="dialog-hint")
             yield TextArea(id="note", soft_wrap=True)
-            yield Static(
-                "The agent reads your notes on its next run.\nctrl+s save · esc cancel",
-                classes="dialog-keys",
-            )
+            yield Static(self.keys, classes="dialog-keys")
 
     def action_save(self) -> None:
         self.dismiss(self.query_one(TextArea).text.strip() or None)
@@ -133,6 +137,8 @@ class KeysHelp(ModalScreen[None]):
             ("enter", "fetch the context; once it is ready, show it"),
             ("a", self.open_label),
             ("A, ctrl+a", self.open_space_label),
+            ("r", f"{self.open_label} with an instruction you write"),
+            ("R", f"{self.open_space_label} with an instruction you write"),
             ("ctrl+enter", "open the first link in the browser"),
             ("space", "done"),
             ("backspace", "ignore"),

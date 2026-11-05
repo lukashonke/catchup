@@ -22,27 +22,38 @@ def default_prompt(item: Item) -> str:
     return "\n\n".join(parts)
 
 
-def prompt_of(item: Item) -> str:
-    """Return the prompt that the open action sends: the agent's, else the default one."""
-    return item.prompt or default_prompt(item)
+def prompt_of(item: Item, extra: str | None = None) -> str:
+    """Return the prompt that the open action sends: the agent's, else the default one.
+
+    `extra` is an instruction the user wrote when opening the item; it comes last and wins.
+    """
+    prompt = item.prompt or default_prompt(item)
+    if extra:
+        prompt += f"\n\nThe user added this instruction. It takes precedence over everything above:\n{extra}"
+    return prompt
 
 
-def item_env(item: Item) -> dict[str, str]:
+def item_env(item: Item, extra: str | None = None) -> dict[str, str]:
     """Return the environment variables that carry the item to `open_command`."""
     return {
         "CATCHUP_ID": str(item.id),
         "CATCHUP_TITLE": item.title,
-        "CATCHUP_PROMPT": prompt_of(item),
+        "CATCHUP_PROMPT": prompt_of(item, extra),
         "CATCHUP_LINKS": "\n".join(link.url for link in item.links),
     }
 
 
 async def open_item(
-    item: Item, config: Config, environ: Mapping[str, str] = os.environ, space: bool = False
+    item: Item,
+    config: Config,
+    environ: Mapping[str, str] = os.environ,
+    space: bool = False,
+    extra: str | None = None,
 ) -> None:
     """Open the item with its command, else with Herdr inside Herdr; raise CatchupError on failure.
 
     With `space`, it opens in a new Herdr space through `open_space_command` instead of a tab.
+    `extra` is the user's own instruction, added to the end of the prompt.
     """
     key, command, label = (
         ("open_space_command", config.open_space_command, config.open_space_label)
@@ -50,14 +61,14 @@ async def open_item(
         else ("open_command", config.open_command, config.open_label)
     )
     if command:
-        result = await run_command(command, {**environ, **item_env(item)})
+        result = await run_command(command, {**environ, **item_env(item, extra)})
         if result.returncode != 0:
             detail = result.stderr.strip() or result.stdout.strip() or "no output"
             raise CatchupError(f"{command[0]} exited with code {result.returncode}: {detail}")
     elif environ.get("HC_TERMINAL_ID"):
         from catchup.herdr import open_in_herdr
 
-        await open_in_herdr(item.title, prompt_of(item), environ, space=space)
+        await open_in_herdr(item.title, prompt_of(item, extra), environ, space=space)
     else:
         raise CatchupError(
             f"{label} has nothing to run. Set {key} in {default_config_path()},"

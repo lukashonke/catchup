@@ -93,7 +93,7 @@ Run `catchup --help` and `catchup COMMAND --help` for every option.
 
 ## Open in Claude
 
-"Open in Claude" in the UI (or `a` on an item) runs a command that starts a coding agent with the item's prompt. A second action, on `A` or Ctrl+A, does the same in a new Herdr space. Set the commands in `~/.config/catchup/config.toml`, as lists of arguments, and optionally rename the actions:
+"Open in Claude" in the UI (or `a` on an item) runs a command that starts a coding agent with the item's prompt. A second action, on `A` or Ctrl+A, does the same in a new Herdr space. `r` and `R` do the same after asking you for an extra instruction, such as "Reschedule this meeting to Friday"; it goes at the end of the prompt and takes precedence over the rest. Set the commands in `~/.config/catchup/config.toml`, as lists of arguments, and optionally rename the actions:
 
 ```toml
 open_command = ["/path/to/my-opener.sh"]
@@ -106,7 +106,7 @@ Catchup runs the command without a shell and passes the item in environment vari
 
 - `CATCHUP_ID`: the item id.
 - `CATCHUP_TITLE`: the title.
-- `CATCHUP_PROMPT`: the prompt. If the item has none, catchup sends the title, the body, the link URLs and "Help me handle this."
+- `CATCHUP_PROMPT`: the prompt. If the item has none, catchup sends the title, the body, the link URLs and "Help me handle this." Your instruction from `r` or `R` follows it.
 - `CATCHUP_LINKS`: the link URLs, one per line.
 
 The prompt comes from messages that other people wrote. Never paste these values into a shell string, such as `sh -c "claude '$CATCHUP_PROMPT'"`: a message could then run commands on your machine. Pass them to programs as separate arguments.

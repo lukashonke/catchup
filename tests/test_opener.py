@@ -52,6 +52,21 @@ def test_default_prompt(item: Item) -> None:
     )
 
 
+async def test_a_reply_goes_last_in_the_prompt_and_wins(
+    item: Item, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = FakeRun((0, "{}", ""))
+    monkeypatch.setattr("catchup.herdr.run_command", fake)
+
+    await open_item(item, Config(), HERDR, extra="Reschedule it to Friday")
+    argv, _ = fake.calls[0]
+    task = json.loads(argv[-1])["task"]
+    assert task == (
+        default_prompt(item) + "\n\nThe user added this instruction."
+        " It takes precedence over everything above:\nReschedule it to Friday"
+    )
+
+
 async def test_open_command_gets_the_item_in_env(
     item: Item, monkeypatch: pytest.MonkeyPatch
 ) -> None:

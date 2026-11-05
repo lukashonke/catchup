@@ -635,7 +635,28 @@ async def test_a_opens_in_a_tab_and_capital_a_or_ctrl_a_in_a_new_space(
         await pilot.pause()
         await pilot.press(key)
         await app.workers.wait_for_complete()
-    assert opened.call_args.kwargs == {"space": key != "a"}
+    assert opened.call_args.kwargs == {"space": key != "a", "extra": None}
+
+
+@pytest.mark.parametrize("key", ["r", "R"])
+async def test_r_opens_with_the_reply_the_user_writes(
+    db: Path, monkeypatch: pytest.MonkeyPatch, key: str
+) -> None:
+    add(db, "waiting", "Planning meeting at 10:00", 1)
+    opened = AsyncMock()
+    monkeypatch.setattr("catchup.tui.app.open_item", opened)
+    app = CatchupApp(Config())
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        await pilot.press(key, "escape")
+        await app.workers.wait_for_complete()
+        assert not opened.called
+        await pilot.press(key)
+        assert text(app, ".dialog-title") == "Reply"
+        await pilot.press(*"Reschedule it", "ctrl+s")
+        await app.workers.wait_for_complete()
+    assert opened.call_args.args[0].title == "Planning meeting at 10:00"
+    assert opened.call_args.kwargs == {"space": key == "R", "extra": "Reschedule it"}
 
 
 async def test_enter_fetches_the_context_then_shows_it(
