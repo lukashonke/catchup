@@ -119,6 +119,11 @@ ITEMS = [
     ),
 ]
 
+WAITING_ON_OTHERS = {
+    "Approve the Q4 cloud budget forecast": "Finance",
+    "Answer Ken about the flaky payment tests": "Ken Okafor",
+}
+
 DONE = [
     ("Review: retry limit for webhooks", "!409 merged"),
     ("Dana: is the export bug fixed on staging?", "Ken answered in the thread"),
@@ -140,6 +145,10 @@ def seed(path: Path) -> int:
             if item.created_at < now - timedelta(hours=4):
                 store.mark_seen(item.id)
         rate_limiter = next(i for i in store.list() if i.title.startswith("Review: rate"))
+        # Asks the user passed on, which the list shows below their own.
+        for title, name in WAITING_ON_OTHERS.items():
+            asked = next(i for i in store.list() if i.title == title)
+            store.update(asked.id, waiting_on=name, note=f"You asked {name}")
     with Store(path, clock=lambda: now - timedelta(hours=2)) as store:
         store.mark_opened(rate_limiter.id)
     with Store(path, clock=lambda: now - timedelta(minutes=40)) as store:
