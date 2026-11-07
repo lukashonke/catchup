@@ -22,7 +22,7 @@ Priority = Literal["urgent", "normal", "low"]
 Actor = Literal["agent", "user"]
 Action = Literal["created", "updated", "done", "snoozed", "reopened", "ignored", "note", "opened"]
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 _SCHEMA = (
     """
@@ -38,7 +38,8 @@ _SCHEMA = (
         snoozed_until TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
-        seen_at TEXT
+        seen_at TEXT,
+        waiting_on TEXT
     )
     """,
     """
@@ -101,6 +102,8 @@ class Item:
     last_event: Event | None
     # When the agent last created, reopened or updated the item.
     agent_changed_at: datetime | None = None
+    # Who has the next move when it is not the user, such as the person the user asked.
+    waiting_on: str | None = None
 
 
 def default_db_path() -> Path:
@@ -157,6 +160,7 @@ class Store:
         priority: Priority = "normal",
         links: Sequence[Link] = (),
         prompt: str | None = None,
+        waiting_on: str | None = None,
         note: str | None = None,
         actor: Actor = "agent",
     ) -> Item:
@@ -168,8 +172,8 @@ class Store:
         now = self._now()
         with self._write():
             item_id = self._db.execute(
-                "INSERT INTO items (kind, title, body, priority, links, prompt, state,"
-                " created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO items (kind, title, body, priority, links, prompt, waiting_on, state,"
+                " created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     kind,
                     title,
@@ -177,6 +181,7 @@ class Store:
                     priority,
                     _links_json(links),
                     prompt,
+                    _waiting_on(waiting_on),
                     "open" if kind == "waiting" else None,
                     _ts(now),
                     _ts(now),
@@ -195,10 +200,14 @@ class Store:
         priority: Priority | None = None,
         links: Sequence[Link] | None = None,
         prompt: str | None = None,
+        waiting_on: str | None = None,
         note: str | None = None,
         actor: Actor = "agent",
     ) -> Item:
-        """Change the given fields (None leaves a field as it is); with only a note, record a `note` event."""
+        """Change the given fields (None leaves a field as it is); with only a note, record a `note` event.
+
+        An empty `waiting_on` gives the next move back to the user.
+        """
         _check(actor, Actor, "actor")
         changes: dict[str, str | None] = {}
         if title is not None:
@@ -213,6 +222,8 @@ class Store:
             changes["links"] = _links_json(links)
         if prompt is not None:
             changes["prompt"] = prompt
+        if waiting_on is not None:
+            changes["waiting_on"] = _waiting_on(waiting_on)
         if not changes and note is None:
             raise CatchupError(f"nothing to update on item {item_id}; pass a field or a note")
         now = self._now()
@@ -417,10 +428,13 @@ class Store:
             if version == 0:
                 for statement in _SCHEMA:
                     self._db.execute(statement)
-            elif version == 1:
-                # Items that exist count as seen, so the first start does not mark them all new.
-                self._db.execute("ALTER TABLE items ADD COLUMN seen_at TEXT")
-                self._db.execute("UPDATE items SET seen_at = ?", (_ts(self._now()),))
+            else:
+                if version < 2:
+                    # Items that exist count as seen, so the first start does not mark them all new.
+                    self._db.execute("ALTER TABLE items ADD COLUMN seen_at TEXT")
+                    self._db.execute("UPDATE items SET seen_at = ?", (_ts(self._now()),))
+                if version < 3:
+                    self._db.execute("ALTER TABLE items ADD COLUMN waiting_on TEXT")
             if version < SCHEMA_VERSION:
                 self._db.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
@@ -439,6 +453,14 @@ def _check_title(title: str) -> None:
         raise CatchupError("the title is empty; give the item a one-line title")
     if "\n" in title:
         raise CatchupError("the title has more than one line; put the rest in the body")
+
+
+def _waiting_on(name: str | None) -> str | None:
+    """Return the name to store; an empty one means the move is the user's."""
+    name = (name or "").strip()
+    if "\n" in name:
+        raise CatchupError("the waiting-on name has more than one line; give one name")
+    return name or None
 
 
 def _not_found(item_id: int) -> CatchupError:
@@ -491,4 +513,5 @@ def _item(row: sqlite3.Row) -> Item:
         new=bool(row["is_new"]),
         last_event=last_event,
         agent_changed_at=_dt(row["agent_changed_at"]) if row["agent_changed_at"] else None,
+        waiting_on=row["waiting_on"],
     )

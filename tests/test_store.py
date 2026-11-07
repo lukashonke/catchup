@@ -110,6 +110,15 @@ def test_update_changes_fields_and_replaces_links(store: Store) -> None:
     assert updated.last_event is not None and updated.last_event.action == "updated"
 
 
+def test_waiting_on_passes_the_move_to_someone_and_empty_gives_it_back(store: Store) -> None:
+    item = store.add("waiting", "Ask Jakub for the numbers", waiting_on=" Jakub Richter ")
+    assert item.waiting_on == "Jakub Richter"
+    assert store.update(item.id, title="Still asking").waiting_on == "Jakub Richter"
+    assert store.update(item.id, waiting_on="").waiting_on is None
+    with pytest.raises(CatchupError, match="one name"):
+        store.update(item.id, waiting_on="Jakub\nKen")
+
+
 def test_update_with_only_a_note_records_a_note_event(store: Store) -> None:
     item = store.add("waiting", "x")
     noted = store.update(item.id, note="still waiting on legal")
@@ -257,4 +266,4 @@ def test_version_1_database_gains_seen_at_with_its_items_seen(tmp_path: Path) ->
         assert not store.get(1).new
         assert store.add("waiting", "fresh").new
     with sqlite3.connect(path) as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 2
+        assert db.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 3
