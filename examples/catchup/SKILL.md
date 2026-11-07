@@ -92,6 +92,7 @@ Fields for `add` and `update`:
 - `--title`: one line, who and what, e.g. `Dana: review the retry limit change !42`.
 - `--body`: one to three short sentences with the detail the user needs to act. Pass long text with `--body -` on stdin.
 - `--priority urgent` when someone is blocked today, a deadline is within two days, or it is about a production incident or money; `low` for open-ended questions with no deadline; otherwise leave the default.
+- `--waiting-on "<name>"` when the next move is someone else's: the user asked them or handed them the work. Give it back with `--waiting-on ""` when they answer. Check it on every open item each run.
 - `--link "label=url"` for every place the user would open: the Slack thread or DM, the email thread, each merge request, the ticket. Use short labels (`DM`, `#channel`, `!42`, `ABC-123`). `update --link` replaces the whole list, so pass all of them.
 - `--prompt` when one coding-agent task fits the item. The agent runs in the user's home directory, so include full URLs:
   - a merge request waiting for review: `Review <MR url> and list the problems you find. Do not post anything.`

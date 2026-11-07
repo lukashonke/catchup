@@ -58,8 +58,9 @@ The first rule that matches wins:
 
 ```
 catchup add --kind waiting|fyi --title TEXT [--body TEXT|-] [--priority urgent|normal|low]
-            [--link "[type:]label=url"]... [--prompt TEXT|-] [--note TEXT]
-catchup update ID [--title TEXT] [--body TEXT|-] [--priority P] [--link ...]... [--prompt TEXT|-] [--note TEXT]
+            [--link "[type:]label=url"]... [--prompt TEXT|-] [--waiting-on NAME] [--note TEXT]
+catchup update ID [--title TEXT] [--body TEXT|-] [--priority P] [--link ...]... [--prompt TEXT|-]
+            [--waiting-on NAME] [--note TEXT]
 catchup list [--state open|snoozed|done|ignored|all] [--kind waiting|fyi|all] [--since WHEN]
 catchup show ID
 catchup done ID [--note TEXT]
@@ -120,10 +121,10 @@ If an item has no prompt, catchup sends a default one: the title, the body, the 
 
 The TUI is a two-pane view:
 
-- **Header**: the name, the number of open waiting items, urgent items and new items, and the time of the agent's last event. With an agent run configured, it also shows a spinner and the start time while the run goes on, a failed or stopped last run, and when the next run is due.
+- **Header**: the name, the number of open waiting items whose next move is yours, how many of those are urgent, the number of new items, the number of open items waiting on others, and the time of the agent's last event. With an agent run configured, it also shows a spinner and the start time while the run goes on, a failed or stopped last run, and when the next run is due.
 - **State tabs**: Open, Snoozed, Done, Ignored, each with a count. With `todoist = true`, a red Todoist tab comes first, set apart by a divider. The TUI still starts on Open.
 - **Filter bar**, above the list while a filter is set.
-- **List**, on the left. On the Open tab it shows a "Waiting on you" section first, sorted by priority and then oldest first. Below it is the FYI feed, newest first, in dimmer text. Each row shows a dot for a new item or an arrow for an opened one, a priority marker (`!` urgent, `↓` low), the title, the type of the main link, and the age. The age turns yellow after 3 days and red after 7.
+- **List**, on the left. On the Open tab it shows a "Waiting on you" section first, sorted by priority and then oldest first. Below it, a "Waiting on others" section holds the items the agent marked as waiting on someone else, in dimmer text with that person's name. Below that is the FYI feed, newest first, in dimmer text. Each row shows a dot for a new item or an arrow for an opened one, a priority marker (`!` urgent, `↓` low), the title, the type of the main link, and the age. The age turns yellow after 3 days and red after 7.
 - **Details**, on the right: the title, the state, when it was first seen and last opened, the body, the links as clickable chips with their type, the buttons, the prompt that "Open in Claude" will send, and the history, including your notes.
 - **Buttons** for a waiting item: Open in Claude, Done, Snooze (1d, 3d, until Monday), Ignore. For done and ignored items: Open in Claude and Reopen. For an FYI: Open in Claude only.
 - **Footer**: the most used keys, and `?` for the list of all keys.
