@@ -91,6 +91,11 @@ def _content_options(
     parser.add_argument("--body", help="short Markdown text, or - to read it from stdin")
     parser.add_argument("--prompt", help="text for the coding agent, or - to read it from stdin")
     parser.add_argument(
+        "--waiting-on",
+        metavar="NAME",
+        help='who has the next move when it is not you; "" gives it back to you',
+    )
+    parser.add_argument(
         "--link",
         action="append",
         type=_link_arg,
@@ -122,6 +127,7 @@ def _add(store: Store, args: argparse.Namespace) -> None:
         priority=args.priority,
         links=args.link or (),
         prompt=args.prompt,
+        waiting_on=args.waiting_on,
         note=args.note,
         actor=args.by,
     )
@@ -136,6 +142,7 @@ def _update(store: Store, args: argparse.Namespace) -> None:
         priority=args.priority,
         links=args.link,
         prompt=args.prompt,
+        waiting_on=args.waiting_on,
         note=args.note,
         actor=args.by,
     )
@@ -225,8 +232,12 @@ def _line(item: Item, now: datetime) -> str:
     marker = _MARKERS.get(item.priority, " ") if item.kind == "waiting" else " "
     kind_state = f"waiting/{item.state}" if item.kind == "waiting" else "fyi"
     link_type = f"  [{item.links[0].type}]" if item.links else ""
+    waiting_on = f"  → {item.waiting_on}" if item.waiting_on else ""
     age = format_age(now - item.created_at)
-    return f"{'#' + str(item.id):>5} {marker} {kind_state:<15} {age:>4}  {item.title}{link_type}"
+    return (
+        f"{'#' + str(item.id):>5} {marker} {kind_state:<15} {age:>4}"
+        f"  {item.title}{waiting_on}{link_type}"
+    )
 
 
 def _details(item: Item, events: list[Event]) -> str:
@@ -240,6 +251,8 @@ def _details(item: Item, events: list[Event]) -> str:
     ]
     if item.snoozed_until:
         lines.append(f"Snoozed until {_local(item.snoozed_until)}")
+    if item.waiting_on:
+        lines.append(f"Waiting on {item.waiting_on}")
     if item.body:
         lines += ["", item.body]
     if item.links:

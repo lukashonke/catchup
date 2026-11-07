@@ -98,6 +98,16 @@ def test_update_replaces_links(capsys: pytest.CaptureFixture[str]) -> None:
     ]
 
 
+def test_waiting_on_is_set_shown_and_cleared(capsys: pytest.CaptureFixture[str]) -> None:
+    item = run_json(capsys, "add", "--kind=waiting", "--title=Ask Jakub", "--waiting-on=Jakub")
+    assert item["waiting_on"] == "Jakub"
+    assert main(["list"]) == 0
+    assert capsys.readouterr().out.splitlines() == [
+        "   #1   waiting/open     now  Ask Jakub  → Jakub"
+    ]
+    assert run_json(capsys, "update", "1", "--waiting-on=")["waiting_on"] is None
+
+
 def test_human_list_line(capsys: pytest.CaptureFixture[str]) -> None:
     main(
         [
