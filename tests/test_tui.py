@@ -66,8 +66,28 @@ async def test_open_tab_lists_waiting_items_then_the_feed(db: Path) -> None:
     async with app.run_test(size=(140, 40)) as pilot:
         await pilot.pause()
         assert ids(app) == [None, urgent, normal_old, low, None, None, fyi_new, fyi_old]
-        assert "3 waiting · 1 urgent" in text(app, "#summary")
+        assert "3 waiting on you · 1 urgent" in text(app, "#summary")
         assert "Open 3" in text(app, "#tabs") and "Done 1" in text(app, "#tabs")
+
+
+async def test_items_waiting_on_others_go_below_the_users_own(db: Path) -> None:
+    asked = add(db, "waiting", "Ask Jakub for the numbers", 5, "urgent")
+    mine = add(db, "waiting", "Answer Ken", 1)
+    with Store(db) as store:
+        store.update(int(asked), waiting_on="Jakub Richter")
+
+    app = CatchupApp(Config())
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        assert ids(app) == [None, mine, None, None, asked]
+        rows = text(app, "ItemList")
+        assert "WAITING ON YOU" in rows and "WAITING ON OTHERS" in rows
+        assert "Ask Jakub for the numbers  → Jakub Richter" in rows
+        assert "1 waiting on you · 0 urgent · 2 new · 1 on others" in text(app, "#summary")
+        assert "Open 2" in text(app, "#tabs")
+        await pilot.press("down")
+        await pilot.pause()
+        assert "waiting on Jakub Richter" in text(app, "#d-meta")
 
 
 async def test_selecting_an_item_shows_its_details(db: Path) -> None:

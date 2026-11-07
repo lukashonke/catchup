@@ -55,18 +55,23 @@ def age_color(item: Item, now: datetime) -> str:
 
 
 class _Line:
-    """One line of text cut to the width it gets, so the ellipsis never follows a space."""
+    """One line of text cut to the width it gets, so the ellipsis never follows a space.
 
-    def __init__(self, text: Text) -> None:
+    The `tail` stays whole; the text before it is cut instead.
+    """
+
+    def __init__(self, text: Text, tail: Text | None = None) -> None:
         self.text = text
+        self.tail = tail or Text("")
 
     def __rich_console__(self, console: Console, options: ConsoleOptions) -> RenderResult:
         text = self.text.copy()
-        if text.cell_len > options.max_width:
-            text.truncate(options.max_width - 1)
+        width = max(options.max_width - self.tail.cell_len, 1)
+        if text.cell_len > width:
+            text.truncate(width - 1)
             text.rstrip()
             text.append("…")
-        yield text
+        yield text + self.tail
 
 
 class KeyHints:
@@ -127,10 +132,12 @@ def _row(item: Item, now: datetime, context: Context | None = None, frame: str =
         status = Text("•", style=f"bold {theme.ACCENT}")
     else:
         status = Text("↗" if item.opened_at else "", style=theme.DIM)
+    title = Text(item.title, style=theme.FEED if fyi or item.waiting_on else "")
+    waiting_on = Text(f"  → {item.waiting_on}", style=theme.DIM) if item.waiting_on else None
     grid.add_row(
         status,
         marker,
-        _Line(Text(item.title, style=theme.FEED if fyi else "")),
+        _Line(title, waiting_on),
         Text(link_type, style=theme.LINK_COLORS.get(link_type, theme.DIM)),
         Text(format_age(now - item.created_at), style=age_color(item, now)),
         _context_mark(item, context, frame),
@@ -177,13 +184,20 @@ class ItemList(OptionList):
         previous = self.highlighted
         self.items = {item.id: item for item in [*waiting, *feed]}
         self.now = now
+        others: list[Item] = []
         options: list[Option] = []
         if tab == "open":
+            others = [item for item in waiting if item.waiting_on]
+            waiting = [item for item in waiting if not item.waiting_on]
             options.append(Option(_section("WAITING ON YOU", str(len(waiting))), disabled=True))
         options += [Option(self._row(item), id=str(item.id)) for item in waiting]
         if not waiting:
             empty = "Nothing matches the filter." if filtered else _EMPTY[tab]
             options.append(Option(Text(empty, style=theme.FAINT), disabled=True))
+        if others:
+            options.append(Option(Text(""), disabled=True))
+            options.append(Option(_section("WAITING ON OTHERS", str(len(others))), disabled=True))
+            options += [Option(self._row(item), id=str(item.id)) for item in others]
         if feed:
             options.append(Option(Text(""), disabled=True))
             options.append(Option(_section("FYI", "newest first"), disabled=True))
@@ -377,6 +391,8 @@ def _meta(item: Item, now: datetime) -> Content:
         Content.styled(f" {state} ", f"{theme.FOREGROUND} on {theme.SELECTED}"),
         Content(f" · first seen {day(item.created_at)} · {_ago(now - item.created_at)}"),
     ]
+    if item.waiting_on:
+        parts.append(Content(f" · waiting on {item.waiting_on}"))
     if item.opened_at:
         parts.append(Content(f" · opened {_ago(now - item.opened_at)}"))
     if item.kind == "waiting" and item.priority == "urgent":

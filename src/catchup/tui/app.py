@@ -338,13 +338,14 @@ class CatchupApp(App[None]):
         summary = Content.assemble(
             ("catchup", f"bold {theme.ACCENT}"),
             "   ",
-            (f"{snapshot.counts['open']} waiting", theme.FOREGROUND),
+            (f"{snapshot.mine} waiting on you", theme.FOREGROUND),
             (f" · {snapshot.urgent} urgent", theme.URGENT if snapshot.urgent else theme.DIM),
             (f" · {snapshot.new} new", theme.ACCENT if snapshot.new else theme.DIM),
+            (f" · {snapshot.counts['open'] - snapshot.mine} on others", theme.DIM),
         )
         self.query_one("#summary", Static).update(summary)
         new = f" · {snapshot.new} new" if snapshot.new else ""
-        self._show_tab_title(f"{snapshot.counts['open']}{new}")
+        self._show_tab_title(f"{snapshot.mine}{new}")
         self._show_agent()
         tabs = []
         if self.config.todoist:

@@ -44,6 +44,8 @@ class Snapshot:
 
     event_id: int
     counts: dict[State, int]
+    # The open waiting items whose next move is the user's, and how many of them are urgent.
+    mine: int
     urgent: int
     # The new items among the open waiting items and the feed.
     new: int
@@ -58,10 +60,12 @@ def load(store: Store, tab: State) -> Snapshot:
     event_id = store.last_event_id()
     waiting: dict[State, list[Item]] = {state: store.list(state=state) for state in TABS}
     feed = store.list(kind="fyi")
+    mine = [item for item in waiting["open"] if not item.waiting_on]
     return Snapshot(
         event_id=event_id,
         counts={state: len(items) for state, items in waiting.items()},
-        urgent=sum(item.priority == "urgent" for item in waiting["open"]),
+        mine=len(mine),
+        urgent=sum(item.priority == "urgent" for item in mine),
         new=sum(item.new for item in [*waiting["open"], *feed]),
         waiting=waiting[tab],
         feed=feed if tab == "open" else [],
