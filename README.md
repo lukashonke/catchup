@@ -40,7 +40,7 @@ Then follow the quick start, and install the skills as [How an agent uses catchu
    catchup
    ```
 
-   Up and down select an item, left and right switch the state tab. Enter fetches the item's context and then shows it in a popup (see [Context](#context)), a opens the item in Claude in a new tab, A or Ctrl+A opens it in a new space, Ctrl+Enter opens its first link, Space marks it done, Backspace ignores it, z snoozes it, u undoes the last change, n adds a note for the agent, / filters the list, s opens the settings, and q quits. Press ? for every key.
+   Up and down select an item, left and right switch the state tab. Enter fetches the item's context and then shows it in a popup (see [Context](#context)), a opens the item in Claude in a new tab, A or Ctrl+A opens it in a new space, Ctrl+Enter opens its first link, Space marks it done, Backspace ignores it, z snoozes it, + and - raise or lower its priority (the agent keeps the priority you set), u undoes the last change, n adds a note for the agent, / filters the list, s opens the settings, and q quits. Press ? for every key.
 
    A dot marks the items the agent added or changed since you last looked at them. Items where the next move is someone else's, such as a question you asked, sit in a dimmer "Waiting on others" section below your own, with the person's name. Inside the Herdr app, the tab name shows the counts too, such as `catchup 12 · 3 new`; they count only the items waiting on you.
 

@@ -148,6 +148,7 @@ The mouse and the up and down keys select items. The keys:
 - a: Open in Claude, in a new Herdr tab. A or Ctrl+A: the same in a new Herdr space.
 - Ctrl+Enter: open the first link in the browser. The terminal must send Ctrl+Enter as its own key (the kitty keyboard protocol); otherwise it arrives as Enter.
 - Space: Done. Backspace: Ignore. z: the snooze picker. These act only on open and snoozed waiting items.
+- + and -: raise or lower the priority of a waiting item between low, normal and urgent. The item remembers that you set it, and from then on the store drops any priority change from the agent. Press the other key to go back; u does not undo it.
 - u: undo the latest state change made in this TUI session (done, ignore, snooze, reopen, from keys or buttons). It restores the previous state and snooze date as your change, with the note "undo". The undo history is in memory and ends with the session.
 - n: write a note on the selected item, waiting item or FYI. Ctrl+S saves it as a `note` event by you; Esc or an empty note cancels.
 - /: filter the rows of the current tab by title, body and link labels, ignoring case. The section counts show the filtered rows. Enter returns to the list and keeps the filter; Esc clears it.

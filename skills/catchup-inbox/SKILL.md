@@ -128,6 +128,10 @@ Only one of `--body` and `--prompt` can be `-` in one call. To set both from std
 - `normal`: the default.
 - `low`: someone asked, but nothing breaks if it waits a week.
 
+An item with a stated deadline is never `low`. Check the deadlines on every run and raise an item to `urgent` once its deadline is today or tomorrow.
+
+When the user has set the priority in the terminal UI, the item shows `"priority_by": "user"` and catchup keeps it: your `--priority` is dropped. Other fields still change.
+
 FYIs ignore priority.
 
 ### Links
@@ -175,6 +179,7 @@ Pass `--note` on every change, so the history explains itself: "Dana posted a fo
   "updated_at": "2026-10-29T14:02:40Z",
   "opened_at": null,
   "waiting_on": null,
+  "priority_by": "agent",
   "new": false,
   "last_event": {"id": 7, "item_id": 2, "at": "2026-10-29T14:02:40Z", "actor": "user", "action": "reopened", "note": null},
   "events": [
@@ -190,6 +195,7 @@ Pass `--note` on every change, so the history explains itself: "Dana posted a fo
 - A snoozed item whose date has passed shows `"state": "open"` and `"snoozed_until": null`. Treat it as open.
 - `opened_at` is when the user last opened the item in a coding agent, or `null`.
 - `waiting_on` is who has the next move when it is not the user, or `null`.
+- `priority_by` is `user` when the user set the priority, else `agent`.
 - `new` is `true` while the user has not looked at the item since you added, reopened or updated it.
 - `last_event` is the item's most recent event. `events` appears only in `show`.
 - `notes` appears only in `list`: the user's notes on the item, oldest first, such as `[{"at": "2026-10-29T14:05:00Z", "note": "Close when Tomáš replies"}]`. `show` has the same notes as `note` events with `"actor": "user"`.
