@@ -22,7 +22,7 @@ Priority = Literal["urgent", "normal", "low"]
 Actor = Literal["agent", "user"]
 Action = Literal["created", "updated", "done", "snoozed", "reopened", "ignored", "note", "opened"]
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 _SCHEMA = (
     """
@@ -39,7 +39,8 @@ _SCHEMA = (
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         seen_at TEXT,
-        waiting_on TEXT
+        waiting_on TEXT,
+        priority_by TEXT NOT NULL DEFAULT 'agent' CHECK (priority_by IN ('agent', 'user'))
     )
     """,
     """
@@ -104,6 +105,8 @@ class Item:
     agent_changed_at: datetime | None = None
     # Who has the next move when it is not the user, such as the person the user asked.
     waiting_on: str | None = None
+    # Who set the priority; the agent cannot change one the user set.
+    priority_by: Actor = "agent"
 
 
 def default_db_path() -> Path:
@@ -172,13 +175,15 @@ class Store:
         now = self._now()
         with self._write():
             item_id = self._db.execute(
-                "INSERT INTO items (kind, title, body, priority, links, prompt, waiting_on, state,"
-                " created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO items (kind, title, body, priority, priority_by, links, prompt,"
+                " waiting_on, state, created_at, updated_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     kind,
                     title,
                     body,
                     priority,
+                    actor,
                     _links_json(links),
                     prompt,
                     _waiting_on(waiting_on),
@@ -206,10 +211,12 @@ class Store:
     ) -> Item:
         """Change the given fields (None leaves a field as it is); with only a note, record a `note` event.
 
-        An empty `waiting_on` gives the next move back to the user.
+        An empty `waiting_on` gives the next move back to the user. The agent's `priority` is
+        dropped once the user has set the priority.
         """
         _check(actor, Actor, "actor")
         changes: dict[str, str | None] = {}
+        kept_users_priority = False
         if title is not None:
             _check_title(title)
             changes["title"] = title
@@ -217,7 +224,11 @@ class Store:
             changes["body"] = body
         if priority is not None:
             _check(priority, Priority, "priority")
-            changes["priority"] = priority
+            if actor == "user" or self._priority_by(item_id) == "agent":
+                changes["priority"] = priority
+                changes["priority_by"] = actor
+            else:
+                kept_users_priority = True
         if links is not None:
             changes["links"] = _links_json(links)
         if prompt is not None:
@@ -225,6 +236,8 @@ class Store:
         if waiting_on is not None:
             changes["waiting_on"] = _waiting_on(waiting_on)
         if not changes and note is None:
+            if kept_users_priority:
+                raise CatchupError(f"the user set the priority of item {item_id}; leave it as is")
             raise CatchupError(f"nothing to update on item {item_id}; pass a field or a note")
         now = self._now()
         with self._write():
@@ -391,6 +404,12 @@ class Store:
         ).fetchall()
         return [_item(row) for row in rows]
 
+    def _priority_by(self, item_id: int) -> Actor:
+        row = self._db.execute("SELECT priority_by FROM items WHERE id = ?", (item_id,)).fetchone()
+        if row is None:
+            raise _not_found(item_id)
+        return row["priority_by"]
+
     def _require(self, item_id: int) -> Kind:
         row = self._db.execute("SELECT kind FROM items WHERE id = ?", (item_id,)).fetchone()
         if row is None:
@@ -435,6 +454,11 @@ class Store:
                     self._db.execute("UPDATE items SET seen_at = ?", (_ts(self._now()),))
                 if version < 3:
                     self._db.execute("ALTER TABLE items ADD COLUMN waiting_on TEXT")
+                if version < 4:
+                    self._db.execute(
+                        "ALTER TABLE items ADD COLUMN priority_by TEXT NOT NULL DEFAULT 'agent'"
+                        " CHECK (priority_by IN ('agent', 'user'))"
+                    )
             if version < SCHEMA_VERSION:
                 self._db.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
@@ -514,4 +538,5 @@ def _item(row: sqlite3.Row) -> Item:
         last_event=last_event,
         agent_changed_at=_dt(row["agent_changed_at"]) if row["agent_changed_at"] else None,
         waiting_on=row["waiting_on"],
+        priority_by=row["priority_by"],
     )

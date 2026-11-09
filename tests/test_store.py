@@ -119,6 +119,16 @@ def test_waiting_on_passes_the_move_to_someone_and_empty_gives_it_back(store: St
         store.update(item.id, waiting_on="Jakub\nKen")
 
 
+def test_the_agent_cannot_change_a_priority_the_user_set(store: Store) -> None:
+    item = store.add("waiting", "Review the GPU case")
+    assert store.update(item.id, priority="low").priority_by == "agent"
+    assert store.update(item.id, priority="urgent", actor="user").priority_by == "user"
+    kept = store.update(item.id, priority="low", title="Review the GPU business case")
+    assert (kept.priority, kept.title) == ("urgent", "Review the GPU business case")
+    with pytest.raises(CatchupError, match="the user set the priority"):
+        store.update(item.id, priority="low")
+
+
 def test_update_with_only_a_note_records_a_note_event(store: Store) -> None:
     item = store.add("waiting", "x")
     noted = store.update(item.id, note="still waiting on legal")
@@ -266,4 +276,4 @@ def test_version_1_database_gains_seen_at_with_its_items_seen(tmp_path: Path) ->
         assert not store.get(1).new
         assert store.add("waiting", "fresh").new
     with sqlite3.connect(path) as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 3
+        assert db.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 4
