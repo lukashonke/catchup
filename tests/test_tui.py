@@ -410,6 +410,27 @@ async def test_z_picks_a_snooze_time_or_takes_a_typed_one(db: Path) -> None:
     assert until is not None and timedelta(hours=47) < until - utc_now() <= timedelta(hours=48)
 
 
+async def test_plus_and_minus_set_the_priority_and_the_agent_keeps_it(db: Path) -> None:
+    first = add(db, "waiting", "Merge the approved MRs", 3)
+    gpu = add(db, "waiting", "Review the GPU business case", 1)
+
+    app = CatchupApp(Config())
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        await pilot.press("down", "plus")
+        await pilot.pause()
+        assert ids(app)[1:3] == [gpu, first]
+        assert "urgent (set by you)" in text(app, "#d-meta")
+        await pilot.press("plus")
+        await pilot.pause()
+        await pilot.press("minus", "minus", "minus")
+        await pilot.pause()
+    with Store(db) as store:
+        item = store.get(int(gpu))
+        assert (item.priority, item.priority_by) == ("low", "user")
+        assert store.update(item.id, priority="urgent", note="deadline Mon").priority == "low"
+
+
 async def test_snooze_picker_keeps_a_bad_time_open(db: Path) -> None:
     add(db, "waiting", "Answer Ken", 2)
 

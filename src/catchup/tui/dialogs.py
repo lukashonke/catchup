@@ -150,6 +150,7 @@ class KeysHelp(ModalScreen[None]):
             ("space", "done"),
             ("backspace", "ignore"),
             ("z", "snooze until a time you pick"),
+            ("+ −", "raise or lower the priority; the agent keeps it"),
             ("u", "undo the last state change"),
             ("n", "write a note for the agent"),
             ("/", "filter the list; esc clears the filter"),
@@ -163,7 +164,7 @@ class KeysHelp(ModalScreen[None]):
         grid.add_column()
         for key, what in keys:
             grid.add_row(key, Text(what))
-        with Vertical(classes="dialog"):
+        with Vertical(classes="dialog keys-dialog"):
             yield Static("Keys", classes="dialog-title")
             yield Static(grid, id="keys")
             yield Static("esc close", classes="dialog-keys")

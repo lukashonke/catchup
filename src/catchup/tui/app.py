@@ -23,7 +23,7 @@ from catchup import CatchupError, agent, context
 from catchup.config import Config, default_config_path, load_config
 from catchup.herdr import TabTitle
 from catchup.opener import open_item
-from catchup.store import Item, State, Store, utc_now
+from catchup.store import Item, Priority, State, Store, utc_now
 from catchup.tui import theme
 from catchup.tui.data import TABS, Snapshot, StoreThread, load
 from catchup.tui.dialogs import ContextView, KeysHelp, NoteEditor, SnoozePicker
@@ -54,11 +54,22 @@ SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 CONTEXT_READ_SPINS = 5
 NARROW_COLUMNS = 110
 TINY_COLUMNS = 62
+_PRIORITIES: tuple[Priority, ...] = ("low", "normal", "urgent")
 _CHANGED = {"done": "Done", "ignored": "Ignored", "open": "Reopened"}
 TODOIST = "todoist"
 Tab = State | Literal["todoist"]
 # The keys that act on inbox items, which do nothing on the Todoist tab.
-_INBOX_ONLY = {"change", "open_link", "undo", "snooze", "note", "reply", "filter", "clear_filter"}
+_INBOX_ONLY = {
+    "change",
+    "priority",
+    "open_link",
+    "undo",
+    "snooze",
+    "note",
+    "reply",
+    "filter",
+    "clear_filter",
+}
 
 # A change takes the store and the item id, and returns the changed item.
 Change = Callable[[Store, int], Item]
@@ -93,6 +104,8 @@ class CatchupApp(App[None]):
         Binding("A,shift+a,ctrl+a", "open(True)", "Open in Claude in a new space", show=False),
         Binding("r", "reply", "Reply", show=False),
         Binding("R,shift+r", "reply(True)", "Reply in a new space", show=False),
+        Binding("plus,equals_sign", "priority(1)", "Raise the priority", show=False),
+        Binding("minus", "priority(-1)", "Lower the priority", show=False),
         Binding("u", "undo", "Undo", show=False),
         Binding("z", "snooze", "Snooze", show=False),
         Binding("n", "note", "Note", show=False),
@@ -549,6 +562,25 @@ class CatchupApp(App[None]):
         # The keys act only where the details pane shows the matching button.
         if _waiting_open(self.item):
             await self._change(self.item, _CHANGES[action])
+
+    async def action_priority(self, step: int) -> None:
+        item = self.item
+        if not _waiting_open(item):
+            return
+        index = _PRIORITIES.index(item.priority) + step
+        if not 0 <= index < len(_PRIORITIES):
+            self.notify(item.title, title=f"Already {item.priority}", markup=False)
+            return
+        priority = _PRIORITIES[index]
+        try:
+            await self.store.run(
+                lambda store: store.update(item.id, priority=priority, actor="user")
+            )
+        except (CatchupError, sqlite3.Error) as e:
+            self.notify(str(e), title="Priority not changed", severity="error", markup=False)
+            return
+        await self.reload()
+        self.notify(item.title, title=f"Priority {priority}", markup=False)
 
     def action_snooze(self) -> None:
         if _waiting_open(self.item):

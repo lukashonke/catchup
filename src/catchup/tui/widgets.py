@@ -395,8 +395,11 @@ def _meta(item: Item, now: datetime) -> Content:
         parts.append(Content(f" · waiting on {item.waiting_on}"))
     if item.opened_at:
         parts.append(Content(f" · opened {_ago(now - item.opened_at)}"))
-    if item.kind == "waiting" and item.priority == "urgent":
-        parts += [Content(" · "), Content.styled("urgent", theme.URGENT)]
+    if item.kind == "waiting" and (item.priority == "urgent" or item.priority_by == "user"):
+        style = theme.URGENT if item.priority == "urgent" else theme.FOREGROUND
+        parts += [Content(" · "), Content.styled(item.priority, style)]
+        if item.priority_by == "user":
+            parts.append(Content(" (set by you)"))
     return Content.assemble(*parts)
 
 
