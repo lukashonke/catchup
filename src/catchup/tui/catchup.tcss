@@ -359,6 +359,10 @@ SnoozePicker, NoteEditor, KeysHelp {
 
 .dialog {
     width: 60;
+    /* Wide enough that no key's description wraps. */
+    &.keys-dialog {
+        width: 74;
+    }
     max-width: 100%;
     height: auto;
     max-height: 100%;
